@@ -45,12 +45,10 @@ namespace BulletHeavenFortressDefense.Managers
             }
 
             Vector2 screenPos = pointAction.action.ReadValue<Vector2>();
-            var ray = worldCamera.ScreenPointToRay(screenPos);
-            if (Physics.Raycast(ray, out var hit))
-            {
-                Debug.Log($"Primary contact at {hit.point}");
-                Systems.PlacementSystem.Instance.HandlePrimaryContact(hit.point);
-            }
+            Vector3 worldPoint = worldCamera.ScreenToWorldPoint(new Vector3(screenPos.x, screenPos.y, worldCamera.nearClipPlane));
+            var contactPosition = new Vector3(worldPoint.x, worldPoint.y, 0f);
+
+            Systems.PlacementSystem.Instance.HandlePrimaryContact(contactPosition);
         }
     }
 }
