@@ -12,17 +12,20 @@ namespace BulletHeavenFortressDefense.Entities
         private float _damage;
         private DamageType _damageType;
         private float _lifeTimer;
+        private Vector3 _direction;
 
-        public void Initialize(TowerData source)
+        public void Initialize(TowerData source, Vector3 direction)
         {
             _damage = source?.Damage ?? 0f;
             _damageType = source != null ? source.DamageType : DamageType.Physical;
             _lifeTimer = maxLifetime;
+            _direction = direction.sqrMagnitude > 0f ? direction.normalized : Vector3.right;
+            transform.right = _direction;
         }
 
         private void Update()
         {
-            transform.Translate(Vector3.right * speed * Time.deltaTime);
+            transform.position += _direction * speed * Time.deltaTime;
             _lifeTimer -= Time.deltaTime;
             if (_lifeTimer <= 0f)
             {
