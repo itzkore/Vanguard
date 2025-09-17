@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: TestGrunt
   m_EditorClassIdentifier: 
   displayName: Grunt
-  prefab: {fileID: 0}
+  prefab: {fileID: 3992177159941443300, guid: 72a9298648a6a464a8f398c1e57afded, type: 3}
   health: 50
   moveSpeed: 1.5
   reward: 10

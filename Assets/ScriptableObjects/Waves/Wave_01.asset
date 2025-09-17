@@ -12,4 +12,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 32363cea70023174ab7422724d0f6b9f, type: 3}
   m_Name: Wave_01
   m_EditorClassIdentifier: 
-  spawns: []
+  spawns:
+  - enemyData: {fileID: 11400000, guid: eed4eaec3d1070e42bd2bc274b050935, type: 2}
+    count: 5
+    spawnInterval: 0.8
+    spawnPointId: 0

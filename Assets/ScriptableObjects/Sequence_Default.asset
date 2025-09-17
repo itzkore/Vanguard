@@ -12,4 +12,5 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 3ab43a5904179d54c8172a5b6c026b98, type: 3}
   m_Name: Sequence_Default
   m_EditorClassIdentifier: 
-  waves: []
+  waves:
+  - {fileID: 11400000, guid: 7937934a7b24f47418d2e6364745ad16, type: 2}

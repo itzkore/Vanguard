@@ -14,8 +14,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   displayName: Rapid Tower
   icon: {fileID: 0}
-  prefab: {fileID: 0}
-  projectilePrefab: {fileID: 0}
+  prefab: {fileID: 4238061986199065120, guid: 6c5d0f04aa7573d4cb947941786c372e, type: 3}
+  projectilePrefab: {fileID: 8269017022640902989, guid: 7c3b0a28c6773f4469100442eda0790d, type: 3}
   buildCost: 25
   damage: 5
   fireRate: 1.5
