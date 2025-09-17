@@ -14,6 +14,8 @@ namespace BulletHeavenFortressDefense.Data
         [SerializeField] private float fireRate = 1f;
         [SerializeField] private float range = 3f;
         [SerializeField] private DamageType damageType = DamageType.Physical;
+        [SerializeField] private TargetPriority targetPriority = TargetPriority.ClosestToTower;
+        [SerializeField] private bool rotateTowardsTarget = true;
 
         public string DisplayName => displayName;
         public Sprite Icon => icon;
@@ -24,5 +26,7 @@ namespace BulletHeavenFortressDefense.Data
         public float FireRate => fireRate;
         public float Range => range;
         public DamageType DamageType => damageType;
+        public TargetPriority TargetPriority => targetPriority;
+        public bool RotateTowardsTarget => rotateTowardsTarget;
     }
 }

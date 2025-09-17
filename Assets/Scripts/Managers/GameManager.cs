@@ -1,5 +1,7 @@
 ﻿using UnityEngine;
 using BulletHeavenFortressDefense.Utilities;
+using BulletHeavenFortressDefense.Entities;
+using BulletHeavenFortressDefense.Systems;
 
 namespace BulletHeavenFortressDefense.Managers
 {
@@ -36,6 +38,9 @@ namespace BulletHeavenFortressDefense.Managers
 
         public void StartRun()
         {
+            BaseCore.Instance?.RestoreFullHealth();
+            EconomySystem.Instance?.ResetEnergy();
+
             SetState(GameState.PreparingWave);
             onRunStarted?.Raise();
         }

@@ -25,15 +25,17 @@ namespace BulletHeavenFortressDefense.Systems
                 return;
             }
 
-            if (IsPlacementValid(worldPosition))
+            if (IsPlacementValid(worldPosition) && EconomySystem.Instance.TrySpend(_pendingTower.BuildCost))
             {
                 bool placed = TowerManager.Instance.TryPlaceTower(_pendingTower, worldPosition);
                 if (placed)
                 {
                     onPlacementSucceeded?.Raise();
+                    _pendingTower = null;
                 }
                 else
                 {
+                    EconomySystem.Instance.Add(_pendingTower.BuildCost);
                     onPlacementFailed?.Raise();
                 }
             }

@@ -1,4 +1,5 @@
-﻿using UnityEngine;
+﻿using System;
+using UnityEngine;
 using BulletHeavenFortressDefense.Utilities;
 
 namespace BulletHeavenFortressDefense.Systems
@@ -9,11 +10,18 @@ namespace BulletHeavenFortressDefense.Systems
         [SerializeField] private GameEvent onEnergyChanged;
 
         public int CurrentEnergy { get; private set; }
+        public event Action<int> EnergyChanged;
 
         protected override void Awake()
         {
             base.Awake();
+            ResetEnergy();
+        }
+
+        public void ResetEnergy()
+        {
             CurrentEnergy = startingEnergy;
+            NotifyChanged();
         }
 
         public bool TrySpend(int amount)
@@ -24,14 +32,20 @@ namespace BulletHeavenFortressDefense.Systems
             }
 
             CurrentEnergy -= amount;
-            onEnergyChanged?.Raise();
+            NotifyChanged();
             return true;
         }
 
         public void Add(int amount)
         {
             CurrentEnergy += amount;
+            NotifyChanged();
+        }
+
+        private void NotifyChanged()
+        {
             onEnergyChanged?.Raise();
+            EnergyChanged?.Invoke(CurrentEnergy);
         }
     }
 }

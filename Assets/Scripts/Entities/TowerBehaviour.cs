@@ -33,6 +33,15 @@ namespace BulletHeavenFortressDefense.Entities
                 return;
             }
 
+            if (_data.RotateTowardsTarget && muzzle != null)
+            {
+                Vector3 lookDirection = (_currentTarget.Position - muzzle.position);
+                if (lookDirection.sqrMagnitude > 0.01f)
+                {
+                    muzzle.right = lookDirection.normalized;
+                }
+            }
+
             _cooldownTimer -= Time.deltaTime;
             if (_cooldownTimer <= 0f)
             {
@@ -45,7 +54,7 @@ namespace BulletHeavenFortressDefense.Entities
         {
             if (_currentTarget != null)
             {
-                if (!_currentTarget.IsAlive || ( _currentTarget.Position - transform.position).sqrMagnitude > _rangeSquared)
+                if (!_currentTarget.IsAlive || (_currentTarget.Position - transform.position).sqrMagnitude > _rangeSquared)
                 {
                     _currentTarget = null;
                 }
@@ -56,7 +65,11 @@ namespace BulletHeavenFortressDefense.Entities
                 return;
             }
 
-            float bestDistance = _rangeSquared;
+            EnemyController bestCandidate = null;
+            float bestScore = float.MaxValue;
+            float bestHealth = float.MinValue;
+            float lowestHealth = float.MaxValue;
+
             foreach (var enemy in EnemyController.ActiveEnemies)
             {
                 if (enemy == null || !enemy.IsAlive)
@@ -64,13 +77,47 @@ namespace BulletHeavenFortressDefense.Entities
                     continue;
                 }
 
-                float distance = (enemy.Position - transform.position).sqrMagnitude;
-                if (distance <= bestDistance)
+                float distanceSq = (enemy.Position - transform.position).sqrMagnitude;
+                if (distanceSq > _rangeSquared)
                 {
-                    bestDistance = distance;
-                    _currentTarget = enemy;
+                    continue;
+                }
+
+                switch (_data.TargetPriority)
+                {
+                    case TargetPriority.ClosestToTower:
+                        if (distanceSq < bestScore)
+                        {
+                            bestScore = distanceSq;
+                            bestCandidate = enemy;
+                        }
+                        break;
+                    case TargetPriority.ClosestToBase:
+                        float baseDist = enemy.DistanceToBaseSquared;
+                        if (baseDist < bestScore)
+                        {
+                            bestScore = baseDist;
+                            bestCandidate = enemy;
+                        }
+                        break;
+                    case TargetPriority.HighestHealth:
+                        if (enemy.RemainingHealth > bestHealth)
+                        {
+                            bestHealth = enemy.RemainingHealth;
+                            bestCandidate = enemy;
+                        }
+                        break;
+                    case TargetPriority.LowestHealth:
+                        if (enemy.RemainingHealth < lowestHealth)
+                        {
+                            lowestHealth = enemy.RemainingHealth;
+                            bestCandidate = enemy;
+                        }
+                        break;
                 }
             }
+
+            _currentTarget = bestCandidate;
         }
 
         private void FireAtTarget()

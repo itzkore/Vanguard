@@ -19,6 +19,16 @@ namespace BulletHeavenFortressDefense.Entities
         public static IReadOnlyList<EnemyController> ActiveEnemies => _activeEnemies;
         public bool IsAlive => _currentHealth > 0f;
         public Vector3 Position => transform.position;
+        public float RemainingHealth => _currentHealth;
+        public float DistanceToBaseSquared
+        {
+            get
+            {
+                return BaseCore.Instance != null
+                    ? (transform.position - BaseCore.Instance.transform.position).sqrMagnitude
+                    : float.MaxValue;
+            }
+        }
 
         private void OnEnable()
         {

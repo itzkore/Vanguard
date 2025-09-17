@@ -1,4 +1,5 @@
-﻿using System.Collections;
+﻿using System;
+using System.Collections;
 using UnityEngine;
 using BulletHeavenFortressDefense.Data;
 using BulletHeavenFortressDefense.Utilities;
@@ -16,6 +17,9 @@ namespace BulletHeavenFortressDefense.Managers
         private Coroutine _activeRoutine;
 
         public bool IsSpawning => _activeRoutine != null;
+        public int CurrentWaveNumber => _currentWaveIndex + 1;
+        public event Action<int> WaveStarted;
+        public event Action<int> WaveCompleted;
 
         public void StartSequence()
         {
@@ -31,19 +35,22 @@ namespace BulletHeavenFortressDefense.Managers
 
         private IEnumerator RunSequence()
         {
-            while (waveSequence != null)
+            while (waveSequence != null && waveSequence.Waves.Count > 0)
             {
                 _currentWaveIndex++;
                 if (_currentWaveIndex >= waveSequence.Waves.Count)
                 {
-                    // Loop for endless mode; otherwise break.
                     _currentWaveIndex = 0;
                 }
 
                 var wave = waveSequence.Waves[_currentWaveIndex];
                 onWaveStarted?.Raise();
+                WaveStarted?.Invoke(CurrentWaveNumber);
+
                 yield return SpawnWave(wave);
+
                 onWaveCompleted?.Raise();
+                WaveCompleted?.Invoke(CurrentWaveNumber);
                 yield return new WaitForSeconds(interWaveDelay);
             }
         }
