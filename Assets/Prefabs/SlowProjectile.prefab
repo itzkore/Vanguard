@@ -1,4 +1,4 @@
-﻿%YAML 1.1
+%YAML 1.1
 %TAG !u! tag:unity3d.com,2011:
 --- !u!1 &8269017022640902989
 GameObject:
@@ -116,3 +116,6 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   speed: 8
   maxLifetime: 5
+  slowFactor: 0.5
+  slowDuration: 2
+  damageMultiplier: 0.5
