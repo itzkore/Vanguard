@@ -9,6 +9,7 @@ namespace BulletHeavenFortressDefense.Data
         [SerializeField] private Sprite icon;
         [SerializeField] private GameObject prefab;
         [SerializeField] private GameObject projectilePrefab;
+        [SerializeField] private string projectilePoolId;
         [SerializeField] private int buildCost = 10;
         [SerializeField] private float damage = 5f;
         [SerializeField] private float fireRate = 1f;
@@ -21,6 +22,7 @@ namespace BulletHeavenFortressDefense.Data
         public Sprite Icon => icon;
         public GameObject Prefab => prefab;
         public GameObject ProjectilePrefab => projectilePrefab;
+        public string ProjectilePoolId => projectilePoolId;
         public int BuildCost => buildCost;
         public float Damage => damage;
         public float FireRate => fireRate;

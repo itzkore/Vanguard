@@ -19,9 +19,24 @@ namespace BulletHeavenFortressDefense.Systems
             }
 
             var point = GetSpawnPoint(enemySpawnPoints, spawnPointId);
-            var instance = Instantiate(enemyData.Prefab, point.position, Quaternion.identity);
-            var controller = instance.GetComponent<EnemyController>();
-            controller.Initialize(enemyData);
+            GameObject instance = null;
+
+            if (!string.IsNullOrEmpty(enemyData.PoolId) && ObjectPoolManager.HasInstance)
+            {
+                instance = ObjectPoolManager.Instance.Spawn(enemyData.PoolId, point.position, Quaternion.identity);
+            }
+
+            if (instance == null)
+            {
+                instance = Instantiate(enemyData.Prefab, point.position, Quaternion.identity);
+            }
+
+            if (!instance.TryGetComponent(out EnemyController controller))
+            {
+                controller = instance.AddComponent<EnemyController>();
+            }
+
+            controller.Initialize(enemyData, enemyData.PoolId);
             return controller;
         }
 

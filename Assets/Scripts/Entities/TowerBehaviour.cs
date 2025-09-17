@@ -1,5 +1,6 @@
 ﻿using UnityEngine;
 using BulletHeavenFortressDefense.Data;
+using BulletHeavenFortressDefense.Managers;
 
 namespace BulletHeavenFortressDefense.Entities
 {
@@ -127,7 +128,7 @@ namespace BulletHeavenFortressDefense.Entities
                 return;
             }
 
-            if (_data.ProjectilePrefab == null || muzzle == null)
+            if (muzzle == null)
             {
                 return;
             }
@@ -138,10 +139,27 @@ namespace BulletHeavenFortressDefense.Entities
                 return;
             }
 
-            var projectileObj = Instantiate(_data.ProjectilePrefab, muzzle.position, Quaternion.identity);
-            if (projectileObj.TryGetComponent(out Projectile projectile))
+            GameObject projectileObj = null;
+            if (!string.IsNullOrEmpty(_data.ProjectilePoolId) && ObjectPoolManager.HasInstance)
             {
-                projectile.Initialize(_data, direction.normalized);
+                projectileObj = ObjectPoolManager.Instance.Spawn(_data.ProjectilePoolId, muzzle.position, Quaternion.identity);
+            }
+
+            if (projectileObj == null && _data.ProjectilePrefab != null)
+            {
+                projectileObj = Instantiate(_data.ProjectilePrefab, muzzle.position, Quaternion.identity);
+            }
+
+            if (projectileObj != null)
+            {
+                if (projectileObj.TryGetComponent(out ITowerProjectile projectile))
+                {
+                    projectile.Initialize(_data, direction.normalized, _data.ProjectilePoolId);
+                }
+                else if (projectileObj.TryGetComponent(out Projectile legacyProjectile))
+                {
+                    legacyProjectile.Initialize(_data, direction.normalized, _data.ProjectilePoolId);
+                }
             }
         }
     }

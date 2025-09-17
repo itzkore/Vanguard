@@ -5,12 +5,15 @@ using BulletHeavenFortressDefense.Managers;
 namespace BulletHeavenFortressDefense.Entities
 {
     [RequireComponent(typeof(Collider2D))]
-    public class Projectile : MonoBehaviour, ITowerProjectile
+    public class SlowProjectile : MonoBehaviour, ITowerProjectile
     {
-        [SerializeField] private float speed = 8f;
+        [SerializeField] private float speed = 6f;
         [SerializeField] private float maxLifetime = 5f;
+        [SerializeField] private float slowFactor = 0.5f;
+        [SerializeField] private float slowDuration = 2f;
+        [SerializeField] private float damageMultiplier = 0.5f;
 
-        private float _damage;
+        private float _baseDamage;
         private DamageType _damageType;
         private float _lifeTimer;
         private Vector3 _direction = Vector3.right;
@@ -18,7 +21,7 @@ namespace BulletHeavenFortressDefense.Entities
 
         public void Initialize(TowerData source, Vector3 direction, string poolId)
         {
-            _damage = source?.Damage ?? 0f;
+            _baseDamage = (source?.Damage ?? 0f) * Mathf.Max(0f, damageMultiplier);
             _damageType = source != null ? source.DamageType : DamageType.Physical;
             _lifeTimer = maxLifetime;
             _poolId = poolId;
@@ -38,12 +41,19 @@ namespace BulletHeavenFortressDefense.Entities
 
         private void OnTriggerEnter2D(Collider2D other)
         {
-            if (!other.TryGetComponent<IDamageable>(out var damageable))
+            if (other.TryGetComponent<IDamageable>(out var damageable))
             {
-                return;
+                if (_baseDamage > 0.01f)
+                {
+                    Systems.DamageSystem.Instance.ApplyDamage(damageable, _baseDamage, _damageType);
+                }
+
+                if (other.TryGetComponent<EnemyController>(out var enemy))
+                {
+                    enemy.ApplySlow(Mathf.Clamp01(slowFactor), Mathf.Max(0f, slowDuration));
+                }
             }
 
-            Systems.DamageSystem.Instance.ApplyDamage(damageable, _damage, _damageType);
             Despawn();
         }
 

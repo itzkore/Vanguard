@@ -12,6 +12,10 @@ namespace BulletHeavenFortressDefense.UI
         [SerializeField] private Text energyText;
         [SerializeField] private Text waveText;
 
+        public Text BaseHealthText => baseHealthText;
+        public Text EnergyText => energyText;
+        public Text WaveText => waveText;
+
         private void OnEnable()
         {
             if (BaseCore.Instance != null)
@@ -33,6 +37,10 @@ namespace BulletHeavenFortressDefense.UI
                 {
                     OnWaveStarted(WaveManager.Instance.CurrentWaveNumber);
                 }
+                else if (waveText != null)
+                {
+                    waveText.text = "Wave 0";
+                }
             }
         }
 
@@ -51,6 +59,36 @@ namespace BulletHeavenFortressDefense.UI
             if (WaveManager.Instance != null)
             {
                 WaveManager.Instance.WaveStarted -= OnWaveStarted;
+            }
+        }
+
+        public void Configure(Text baseLabel, Text energyLabel, Text waveLabel)
+        {
+            baseHealthText = baseLabel;
+            energyText = energyLabel;
+            waveText = waveLabel;
+            ApplyInitialValues();
+        }
+
+        private void ApplyInitialValues()
+        {
+            if (BaseCore.Instance != null)
+            {
+                OnBaseHealthChanged(BaseCore.Instance.CurrentHealth, BaseCore.Instance.MaxHealth);
+            }
+
+            if (EconomySystem.Instance != null)
+            {
+                OnEnergyChanged(EconomySystem.Instance.CurrentEnergy);
+            }
+
+            if (WaveManager.Instance != null && WaveManager.Instance.CurrentWaveNumber > 0)
+            {
+                OnWaveStarted(WaveManager.Instance.CurrentWaveNumber);
+            }
+            else if (waveText != null)
+            {
+                waveText.text = "Wave 0";
             }
         }
 

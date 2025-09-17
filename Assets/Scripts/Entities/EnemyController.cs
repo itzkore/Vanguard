@@ -1,6 +1,7 @@
 ﻿using System.Collections.Generic;
 using UnityEngine;
 using BulletHeavenFortressDefense.Data;
+using BulletHeavenFortressDefense.Managers;
 
 namespace BulletHeavenFortressDefense.Entities
 {
@@ -15,20 +16,19 @@ namespace BulletHeavenFortressDefense.Entities
 
         private EnemyData _data;
         private float _currentHealth;
+        private string _poolId;
+        private bool _released;
+        private float _baseMoveSpeed;
+        private float _speedMultiplier = 1f;
+        private float _slowTimer;
 
         public static IReadOnlyList<EnemyController> ActiveEnemies => _activeEnemies;
         public bool IsAlive => _currentHealth > 0f;
         public Vector3 Position => transform.position;
         public float RemainingHealth => _currentHealth;
-        public float DistanceToBaseSquared
-        {
-            get
-            {
-                return BaseCore.Instance != null
-                    ? (transform.position - BaseCore.Instance.transform.position).sqrMagnitude
-                    : float.MaxValue;
-            }
-        }
+        public float DistanceToBaseSquared => BaseCore.Instance != null
+            ? (transform.position - BaseCore.Instance.transform.position).sqrMagnitude
+            : float.MaxValue;
 
         private void OnEnable()
         {
@@ -43,17 +43,24 @@ namespace BulletHeavenFortressDefense.Entities
             _activeEnemies.Remove(this);
         }
 
-        private void OnDestroy()
-        {
-            _activeEnemies.Remove(this);
-        }
-
-        public void Initialize(EnemyData data)
+        public void Initialize(EnemyData data, string poolId)
         {
             _data = data;
+            _poolId = poolId;
+            _released = false;
+
             _currentHealth = data?.Health ?? 0f;
-            moveSpeed = data?.MoveSpeed ?? moveSpeed;
-            contactDamage = Mathf.Max(contactDamage, 0f);
+            _baseMoveSpeed = data?.MoveSpeed ?? moveSpeed;
+            moveSpeed = _baseMoveSpeed;
+            contactDamage = data != null ? Mathf.Max(0f, data.ContactDamage) : contactDamage;
+            _speedMultiplier = 1f;
+            _slowTimer = 0f;
+
+            if (body != null)
+            {
+                body.velocity = Vector2.zero;
+                body.angularVelocity = 0f;
+            }
         }
 
         private void Update()
@@ -63,7 +70,25 @@ namespace BulletHeavenFortressDefense.Entities
                 return;
             }
 
-            body?.MovePosition(transform.position + Vector3.left * moveSpeed * Time.deltaTime);
+            if (_slowTimer > 0f)
+            {
+                _slowTimer -= Time.deltaTime;
+                if (_slowTimer <= 0f)
+                {
+                    _speedMultiplier = 1f;
+                }
+            }
+
+            float speed = _baseMoveSpeed * Mathf.Max(0.05f, _speedMultiplier);
+            var newPos = (Vector3)(Vector2.left * speed * Time.deltaTime) + transform.position;
+            if (body != null)
+            {
+                body.MovePosition(newPos);
+            }
+            else
+            {
+                transform.position = newPos;
+            }
         }
 
         public void TakeDamage(float amount, DamageType damageType)
@@ -82,10 +107,37 @@ namespace BulletHeavenFortressDefense.Entities
             }
         }
 
+        public void ApplySlow(float slowFactor, float duration)
+        {
+            slowFactor = Mathf.Clamp(slowFactor, 0.05f, 1f);
+            _speedMultiplier = Mathf.Min(_speedMultiplier, slowFactor);
+            _slowTimer = Mathf.Max(_slowTimer, duration);
+        }
+
         private void Die()
         {
             Systems.EconomySystem.Instance.Add(_data != null ? _data.Reward : 0);
-            gameObject.SetActive(false);
+            Despawn();
+        }
+
+        private void Despawn()
+        {
+            if (_released)
+            {
+                return;
+            }
+
+            _released = true;
+            _currentHealth = 0f;
+
+            if (!string.IsNullOrEmpty(_poolId) && ObjectPoolManager.HasInstance)
+            {
+                ObjectPoolManager.Instance.Release(_poolId, gameObject);
+            }
+            else
+            {
+                gameObject.SetActive(false);
+            }
         }
 
         private void OnTriggerEnter2D(Collider2D other)
@@ -98,7 +150,7 @@ namespace BulletHeavenFortressDefense.Entities
             if (other.TryGetComponent<IDamageable>(out var damageable))
             {
                 damageable.TakeDamage(contactDamage, DamageType.Physical);
-                Die();
+                Despawn();
             }
         }
     }

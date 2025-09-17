@@ -12,45 +12,106 @@ namespace BulletHeavenFortressDefense.Managers
             public string id;
             public GameObject prefab;
             public int size = 10;
+            public bool expandable = true;
+        }
+
+        private class PoolRuntime
+        {
+            public PoolConfig Config;
+            public readonly Queue<GameObject> Available = new();
+            public readonly List<GameObject> All = new();
         }
 
         [SerializeField] private List<PoolConfig> pools = new();
 
-        private readonly Dictionary<string, Queue<GameObject>> _poolLookup = new();
+        private readonly Dictionary<string, PoolRuntime> _poolLookup = new();
 
-        private void Start()
+        protected override void Awake()
         {
+            base.Awake();
+            InitializePools();
+        }
+
+        private void InitializePools()
+        {
+            _poolLookup.Clear();
+
             foreach (var pool in pools)
             {
-                if (pool.prefab == null || string.IsNullOrEmpty(pool.id))
+                if (pool.prefab == null || string.IsNullOrWhiteSpace(pool.id))
                 {
                     continue;
                 }
 
-                var queue = new Queue<GameObject>();
-                for (int i = 0; i < Mathf.Max(1, pool.size); i++)
+                var runtime = new PoolRuntime { Config = pool };
+                int targetCount = Mathf.Max(1, pool.size);
+                for (int i = 0; i < targetCount; i++)
                 {
-                    var obj = Instantiate(pool.prefab);
-                    obj.SetActive(false);
-                    queue.Enqueue(obj);
+                    var instance = CreateInstance(pool.id, pool.prefab, runtime);
+                    runtime.Available.Enqueue(instance);
                 }
 
-                _poolLookup[pool.id] = queue;
+                _poolLookup[pool.id] = runtime;
             }
         }
 
         public GameObject Spawn(string poolId, Vector3 position, Quaternion rotation)
         {
-            if (!_poolLookup.TryGetValue(poolId, out var queue) || queue.Count == 0)
+            if (!_poolLookup.TryGetValue(poolId, out var runtime))
             {
-                Debug.LogWarning($"Pool {poolId} exhausted or missing.");
+                Debug.LogWarning($"Pool {poolId} not configured.");
                 return null;
             }
 
-            var instance = queue.Dequeue();
+            if (runtime.Available.Count == 0)
+            {
+                if (!runtime.Config.expandable)
+                {
+                    Debug.LogWarning($"Pool {poolId} exhausted (expand disabled).");
+                    return null;
+                }
+
+                var expanded = CreateInstance(poolId, runtime.Config.prefab, runtime);
+                runtime.Available.Enqueue(expanded);
+            }
+
+            var instance = runtime.Available.Dequeue();
             instance.transform.SetPositionAndRotation(position, rotation);
             instance.SetActive(true);
-            queue.Enqueue(instance);
+            return instance;
+        }
+
+        public void Release(string poolId, GameObject instance)
+        {
+            if (instance == null)
+            {
+                return;
+            }
+
+            if (!_poolLookup.TryGetValue(poolId, out var runtime))
+            {
+                Destroy(instance);
+                return;
+            }
+
+            instance.SetActive(false);
+            instance.transform.SetParent(transform);
+            runtime.Available.Enqueue(instance);
+        }
+
+        private GameObject CreateInstance(string poolId, GameObject prefab, PoolRuntime runtime)
+        {
+            var instance = Instantiate(prefab, transform);
+            instance.SetActive(false);
+            runtime.All.Add(instance);
+
+            var marker = instance.GetComponent<PooledInstanceMarker>();
+            if (marker == null)
+            {
+                marker = instance.AddComponent<PooledInstanceMarker>();
+            }
+
+            marker.PoolId = poolId;
             return instance;
         }
     }

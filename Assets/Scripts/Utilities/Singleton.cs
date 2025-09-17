@@ -30,6 +30,8 @@ namespace BulletHeavenFortressDefense.Utilities
             }
         }
 
+        public static bool HasInstance => _instance != null;
+
         protected virtual void Awake()
         {
             if (_instance == null)

@@ -9,15 +9,19 @@ namespace BulletHeavenFortressDefense.Data
         [SerializeField] private GameObject prefab;
         [SerializeField] private float health = 20f;
         [SerializeField] private float moveSpeed = 1.5f;
+        [SerializeField] private float contactDamage = 10f;
         [SerializeField] private int reward = 5;
         [SerializeField] private DamageResistance[] resistances;
+        [SerializeField] private string poolId;
 
         public string DisplayName => displayName;
         public GameObject Prefab => prefab;
         public float Health => health;
         public float MoveSpeed => moveSpeed;
+        public float ContactDamage => contactDamage;
         public int Reward => reward;
         public DamageResistance[] Resistances => resistances;
+        public string PoolId => poolId;
 
         public float GetResistanceModifier(DamageType damageType)
         {
