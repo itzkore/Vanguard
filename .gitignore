@@ -1,0 +1,60 @@
+﻿# Created by Codex – Unity gitignore
+[Ll]ibrary/
+[Tt]emp/
+[Oo]bj/
+[Bb]uild/
+[Bb]uilds/
+[Ll]ogs/
+UserSettings/
+MemoryCaptures/
+Recordings/
+
+# Asset meta data should be tracked
+*.pidb
+*.suo
+*.user
+*.userprefs
+*.csproj
+*.unityproj
+*.sln
+*.tmp
+*.booproj
+*.svd
+
+# Visual Studio / Rider
+.vs/
+.idea/
+*.sln.iml
+*.csproj.user
+
+# OS generated
+.DS_Store
+Thumbs.db
+
+# Unity cache
+Library/
+obj/
+Temp/
+
+# Crash Reports
+sysinfo.txt
+
+# Addressables
+Assets/AddressableAssetsData*/
+
+# Builds
+*.apk
+*.aab
+*.ipa
+
+# Logs
+*.log
+
+# Collaborate
+.collab/
+
+# Rider
+*.DotSettings.user
+
+# VS Code
+.vscode/
