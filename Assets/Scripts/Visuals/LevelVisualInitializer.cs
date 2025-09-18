@@ -35,6 +35,14 @@ namespace BulletHeavenFortressDefense.Visuals
             _baseSprite = CreateSprite(baseZoneColor);
 
             GenerateGround();
+
+            // Ensure FortressManager exists in scene; if not, create one so fortress spawns
+            if (!Fortress.FortressManager.HasInstance)
+            {
+                var fortressGo = new GameObject("FortressManager");
+                fortressGo.transform.SetParent(transform);
+                fortressGo.AddComponent<Fortress.FortressManager>();
+            }
         }
 
         private void GenerateGround()

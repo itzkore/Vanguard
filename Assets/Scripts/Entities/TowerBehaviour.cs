@@ -1,6 +1,7 @@
 ﻿using UnityEngine;
 using BulletHeavenFortressDefense.Data;
 using BulletHeavenFortressDefense.Managers;
+using BulletHeavenFortressDefense.Fortress;
 
 namespace BulletHeavenFortressDefense.Entities
 {
@@ -13,12 +14,30 @@ namespace BulletHeavenFortressDefense.Entities
         private float _cooldownTimer;
         private float _rangeSquared;
         private EnemyController _currentTarget;
+        private FortressMount _mount;
+
+        public FortressMount Mount => _mount;
 
         public void Initialize(TowerData data)
         {
             _data = data;
             fireCooldown = data?.FireRate > 0f ? 1f / data.FireRate : 1f;
             _rangeSquared = data != null ? data.Range * data.Range : 0f;
+        }
+
+        public void AssignMount(FortressMount mount)
+        {
+            _mount = mount;
+        }
+
+        private void OnDestroy()
+        {
+            if (_mount != null)
+            {
+                var mountRef = _mount;
+                _mount = null;
+                mountRef.NotifyTowerDestroyed(this);
+            }
         }
 
         private void Update()

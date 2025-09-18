@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 using BulletHeavenFortressDefense.Data;
@@ -128,6 +128,11 @@ namespace BulletHeavenFortressDefense.UI
             rect.anchorMin = new Vector2(0f, 0f);
             rect.anchorMax = new Vector2(1f, 1f);
             rect.sizeDelta = new Vector2(240f, 48f);
+            var layoutElement = buttonGO.AddComponent<LayoutElement>();
+            layoutElement.preferredWidth = 220f;
+            layoutElement.minWidth = 200f;
+            layoutElement.preferredHeight = 48f;
+            layoutElement.minHeight = 44f;
 
             var image = buttonGO.AddComponent<Image>();
             image.color = new Color(0.2f, 0.24f, 0.32f, 0.85f);

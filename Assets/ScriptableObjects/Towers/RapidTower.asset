@@ -1,0 +1,26 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e73f71da045c2c84fa76fae85ef35cfa, type: 3}
+  m_Name: RapidTower
+  m_EditorClassIdentifier: 
+  displayName: Rapid Tower
+  icon: {fileID: 0}
+  prefab: {fileID: 4238061986199065120, guid: 6c5d0f04aa7573d4cb947941786c372e, type: 3}
+  projectilePrefab: {fileID: 8269017022640902989, guid: 7c3b0a28c6773f4469100442eda0790d, type: 3}
+  projectilePoolId: projectiles_basic
+  buildCost: 25
+  damage: 5
+  fireRate: 1.5
+  range: 3
+  damageType: 0
+  targetPriority: 0
+  rotateTowardsTarget: 1

@@ -16,5 +16,7 @@ MonoBehaviour:
   prefab: {fileID: 3992177159941443300, guid: 72a9298648a6a464a8f398c1e57afded, type: 3}
   health: 50
   moveSpeed: 1.5
+  contactDamage: 10
   reward: 10
   resistances: []
+  poolId: enemies_grunt

@@ -13,6 +13,11 @@ namespace BulletHeavenFortressDefense.Managers
         protected override void Awake()
         {
             base.Awake();
+            // Fallback to main camera if not assigned to avoid null reference during placement
+            if (worldCamera == null && Camera.main != null)
+            {
+                worldCamera = Camera.main;
+            }
 
             if (primaryContactAction != null)
             {

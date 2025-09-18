@@ -1,4 +1,4 @@
-﻿using UnityEngine;
+using UnityEngine;
 using BulletHeavenFortressDefense.Data;
 using BulletHeavenFortressDefense.Managers;
 using BulletHeavenFortressDefense.Entities;
@@ -40,14 +40,14 @@ namespace BulletHeavenFortressDefense.Systems
             return controller;
         }
 
-        public TowerBehaviour SpawnTower(TowerData towerData, Vector3 position)
+        public TowerBehaviour SpawnTower(TowerData towerData, Vector3 position, Transform parent = null)
         {
             if (towerData?.Prefab == null)
             {
                 return null;
             }
 
-            var instance = Instantiate(towerData.Prefab, position, Quaternion.identity);
+            var instance = Instantiate(towerData.Prefab, position, Quaternion.identity, parent);
             var behaviour = instance.GetComponent<TowerBehaviour>();
             behaviour.Initialize(towerData);
             return behaviour;

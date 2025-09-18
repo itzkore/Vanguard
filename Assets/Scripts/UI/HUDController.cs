@@ -8,7 +8,7 @@ namespace BulletHeavenFortressDefense.UI
 {
     public class HUDController : MonoBehaviour
     {
-        [SerializeField] private Text baseHealthText;
+    [SerializeField] private Text baseHealthText;
         [SerializeField] private Text energyText;
         [SerializeField] private Text waveText;
 
@@ -18,13 +18,13 @@ namespace BulletHeavenFortressDefense.UI
 
         private void OnEnable()
         {
-            if (BaseCore.Instance != null)
+            if (BaseCore.Instance != null && baseHealthText != null)
             {
                 BaseCore.Instance.HealthChanged += OnBaseHealthChanged;
                 OnBaseHealthChanged(BaseCore.Instance.CurrentHealth, BaseCore.Instance.MaxHealth);
             }
 
-            if (EconomySystem.Instance != null)
+            if (EconomySystem.Instance != null && energyText != null)
             {
                 EconomySystem.Instance.EnergyChanged += OnEnergyChanged;
                 OnEnergyChanged(EconomySystem.Instance.CurrentEnergy);
@@ -46,12 +46,12 @@ namespace BulletHeavenFortressDefense.UI
 
         private void OnDisable()
         {
-            if (BaseCore.Instance != null)
+            if (BaseCore.Instance != null && baseHealthText != null)
             {
                 BaseCore.Instance.HealthChanged -= OnBaseHealthChanged;
             }
 
-            if (EconomySystem.Instance != null)
+            if (EconomySystem.Instance != null && energyText != null)
             {
                 EconomySystem.Instance.EnergyChanged -= OnEnergyChanged;
             }
@@ -72,12 +72,12 @@ namespace BulletHeavenFortressDefense.UI
 
         private void ApplyInitialValues()
         {
-            if (BaseCore.Instance != null)
+            if (BaseCore.Instance != null && baseHealthText != null)
             {
                 OnBaseHealthChanged(BaseCore.Instance.CurrentHealth, BaseCore.Instance.MaxHealth);
             }
 
-            if (EconomySystem.Instance != null)
+            if (EconomySystem.Instance != null && energyText != null)
             {
                 OnEnergyChanged(EconomySystem.Instance.CurrentEnergy);
             }
