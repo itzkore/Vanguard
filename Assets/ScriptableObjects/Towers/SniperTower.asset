@@ -1,0 +1,55 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e73f71da045c2c84fa76fae85ef35cfa, type: 3}
+  m_Name: SniperTower
+  m_EditorClassIdentifier: 
+  displayName: Sniper Tower
+  icon: {fileID: 0}
+  prefab: {fileID: 4238061986199065120, guid: c182c636d83fdf04a88eb3ebf18ef618, type: 3}
+  projectilePrefab: {fileID: 8269017022640902989, guid: f53b50014d7f5c047bd937d5c6ff1c89, type: 3}
+  projectilePoolId: projectiles_basic
+  buildCost: 50
+  damage: 50
+  fireRate: 0.5
+  range: 3
+  damageType: 0
+  targetPriority: 1
+  rotateTowardsTarget: 1
+  maxLevel: 10
+  upgradeCostBase: 20
+  upgradeCostGrowth: 1.5
+  upgradeCostExtraMult: 1
+  sellRefundPercent: 0.6
+  fireRatePerLevelMult: 1.2
+  rangePerLevelMult: 1.1
+  damagePerLevelMult: 1.3
+  damageFlatPerLevel: 0
+  isSplash: 0
+  splashRadiusBase: 1.5
+  splashRadiusPerLevelMult: 1.15
+  splashRadiusPerLevelFlat: 0
+  splashFalloffExponent: 1
+  isSlow: 0
+  slowFactorBase: 0.5
+  slowFactorPerLevelAdd: -0.03
+  slowDurationBase: 2
+  slowDurationPerLevelAdd: 0.25
+  projectilesPerShotBase: 1
+  projectilesPerShotPerLevel: 0.25
+  slowTowerDamageMultiplier: 0.6
+  isSniper: 1
+  sniperDamageMultiplier: 3
+  sniperPierceCount: 99
+  sniperCritChance: 0.15
+  sniperCritMultiplier: 2.5
+  sniperRangeMultiplier: 2.5
+  sniperProjectileSpeed: 80

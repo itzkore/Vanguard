@@ -88,6 +88,26 @@ namespace BulletHeavenFortressDefense.UI
             overlay.color = c;
         }
 
+        // Called when the wall reaches final destroyed state; clear overlays so no red remains
+        public void SetDestroyedAppearance()
+        {
+            if (segmented)
+            {
+                EnsureQuadrants();
+                var clear = new Color(0, 0, 0, 0);
+                overlayUL.color = clear;
+                overlayUR.color = clear;
+                overlayLL.color = clear;
+                overlayLR.color = clear;
+                overlayC.color = clear;
+            }
+            else
+            {
+                if (overlay == null) EnsureOverlay();
+                overlay.color = new Color(0, 0, 0, 0);
+            }
+        }
+
         public void SetPercents(float pUL, float pUR, float pLL, float pLR, float pC)
         {
             if (!segmented)
@@ -139,7 +159,7 @@ namespace BulletHeavenFortressDefense.UI
             var tex = new Texture2D(1, 1, TextureFormat.RGBA32, false);
             tex.SetPixel(0, 0, color);
             tex.Apply();
-            return Sprite.Create(tex, new Rect(0, 0, 1, 1), new Vector2(0.5f, 0.5f), 1f);
+            return Sprite.Create(tex, new Rect(0, 0, 1, 1), new Vector2(0.5f, 0.5f), 1f, 0, SpriteMeshType.FullRect);
         }
     }
 }

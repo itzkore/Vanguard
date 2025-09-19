@@ -24,6 +24,13 @@ namespace BulletHeavenFortressDefense.Data
         [SerializeField] private GameObject projectilePrefab;
         [SerializeField] private string projectilePoolId;
 
+    [Header("Blood FX (Optional)")]
+    [SerializeField, Tooltip("Prefab for small hit blood effect (particles or sprite). Optional.")] private GameObject hitBloodPrefab;
+    [SerializeField, Tooltip("Prefab for death blood effect (bigger burst). Optional.")] private GameObject deathBloodPrefab;
+    [SerializeField, Tooltip("If true, auto-rotate hit effect in direction of incoming damage (if direction known). ")] private bool orientBloodToHit = true;
+    [SerializeField, Tooltip("Minimum seconds between spawning hit blood on the SAME enemy (throttle). ")] private float hitBloodCooldown = 0.08f;
+
+
         public string DisplayName => displayName;
         public GameObject Prefab => prefab;
         public float Health => health;
@@ -41,6 +48,10 @@ namespace BulletHeavenFortressDefense.Data
     public float ProjectileSpeed => projectileSpeed;
     public GameObject ProjectilePrefab => projectilePrefab;
     public string ProjectilePoolId => projectilePoolId;
+    public GameObject HitBloodPrefab => hitBloodPrefab;
+    public GameObject DeathBloodPrefab => deathBloodPrefab;
+    public bool OrientBloodToHit => orientBloodToHit;
+    public float HitBloodCooldown => Mathf.Max(0f, hitBloodCooldown);
 
         public float GetResistanceModifier(DamageType damageType)
         {

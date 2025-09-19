@@ -42,15 +42,21 @@ namespace BulletHeavenFortressDefense.Entities
             }
 
             _currentHealth -= Mathf.RoundToInt(amount);
+            if (_currentHealth < 0) _currentHealth = 0;
+            Debug.Log($"[BaseCore] TakeDamage {amount} -> {_currentHealth}/{maxHealth}");
             onBaseDamaged?.Raise();
             NotifyHealthChanged();
 
             if (_currentHealth <= 0)
             {
-                _currentHealth = 0;
+                if (IsAlive) return; // guard
                 onBaseDestroyed?.Raise();
                 NotifyHealthChanged();
-                GameManager.Instance.EndRun();
+                if (GameManager.HasInstance && GameManager.Instance.CurrentState != Managers.GameManager.GameState.GameOver)
+                {
+                    Debug.Log("[BaseCore] Core destroyed -> triggering GameOver");
+                    GameManager.Instance.EndRun();
+                }
             }
         }
 

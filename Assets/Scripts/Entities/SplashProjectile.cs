@@ -9,8 +9,8 @@ namespace BulletHeavenFortressDefense.Entities
     {
         [SerializeField] private float speed = 7f;
         [SerializeField] private float maxLifetime = 4f;
-        [SerializeField] private float radius = 1.5f;
-        [SerializeField] private float falloffExponent = 1f;
+    [SerializeField, Tooltip("Runtime current radius (set from TowerData each shot). ")] private float radius = 1.5f;
+    [SerializeField] private float falloffExponent = 1f;
         [SerializeField] private LayerMask hitMask = ~0;
 
         private float _damage;
@@ -31,6 +31,19 @@ namespace BulletHeavenFortressDefense.Entities
             _exploded = false;
             _direction = direction.sqrMagnitude > 0.001f ? direction.normalized : Vector3.right;
             transform.right = _direction;
+            // Inject scalable splash values
+            if (source != null && source.IsSplash)
+            {
+                radius = ComputeScaledRadius(source, 1); // level passed implicitly via damage (already scaled at tower?) – We'll treat source.Damage unaffected.
+                falloffExponent = source.SplashFalloffExponent;
+            }
+        }
+
+        private float ComputeScaledRadius(TowerData data, int dummy)
+        {
+            // We don't know the tower level here; assume damage already scaled externally. For now Splash radius encoded by Damage field? Instead we will stash radius in damage via wrapper soon if needed.
+            // Simpler: radius already set in TowerBehaviour before spawning projectile (we'll override there). This method kept for potential future use.
+            return Mathf.Max(0f, radius);
         }
 
         private void Update()
@@ -58,6 +71,7 @@ namespace BulletHeavenFortressDefense.Entities
             _exploded = true;
 
             int hitCount = Physics2D.OverlapCircleNonAlloc(transform.position, radius, _overlapResults, hitMask);
+            int damaged = 0;
             for (int i = 0; i < hitCount; i++)
             {
                 var collider = _overlapResults[i];
@@ -73,7 +87,12 @@ namespace BulletHeavenFortressDefense.Entities
                 if (damage > 0.01f)
                 {
                     Systems.DamageSystem.Instance.ApplyDamage(damageable, damage, _damageType);
+                    damaged++;
                 }
+            }
+            if (damaged > 0)
+            {
+                Debug.Log($"[Splash] radius={radius:F2} damaged={damaged}");
             }
 
             Despawn();

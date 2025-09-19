@@ -21,22 +21,31 @@ namespace BulletHeavenFortressDefense.Visuals
         {
             if (container == null)
             {
-                var go = new GameObject("LevelVisuals")
-                {
-                    hideFlags = HideFlags.DontSave
-                };
+                var go = new GameObject("LevelVisuals") { hideFlags = HideFlags.DontSave };
                 go.transform.SetParent(transform);
                 container = go.transform;
                 container.localPosition = Vector3.zero;
             }
+            StartCoroutine(DeferredInit());
+        }
 
-            _backgroundSprite = CreateSprite(backgroundColor);
-            _walkwaySprite = CreateSprite(walkwayColor);
-            _baseSprite = CreateSprite(baseZoneColor);
-
-            GenerateGround();
-
-            // Ensure FortressManager exists in scene; if not, create one so fortress spawns
+        private System.Collections.IEnumerator DeferredInit()
+        {
+            // Wait one frame so HUDBootstrapper can spawn ParallaxBackground
+            yield return null;
+            bool hasParallax = FindObjectOfType<BulletHeavenFortressDefense.Visual.ParallaxBackground>() != null;
+            if (!hasParallax)
+            {
+                _backgroundSprite = CreateSprite(backgroundColor);
+                _walkwaySprite = CreateSprite(walkwayColor);
+                _baseSprite = CreateSprite(baseZoneColor);
+                GenerateGround();
+            }
+            else
+            {
+                ClearChildren();
+                enabled = false;
+            }
             if (!Fortress.FortressManager.HasInstance)
             {
                 var fortressGo = new GameObject("FortressManager");
@@ -48,7 +57,6 @@ namespace BulletHeavenFortressDefense.Visuals
         private void GenerateGround()
         {
             ClearChildren();
-
             int halfHeight = gridSize.y / 2;
             for (int x = 0; x < gridSize.x; x++)
             {
@@ -62,27 +70,16 @@ namespace BulletHeavenFortressDefense.Visuals
 
         private Sprite ChooseSpriteFor(int x, int yIndex)
         {
-            if (x < baseZoneWidth)
-            {
-                return _baseSprite;
-            }
-
+            if (x < baseZoneWidth) return _baseSprite;
             int walkwayStart = Mathf.Max(0, (gridSize.y - walkwayHeight) / 2);
             int walkwayEnd = Mathf.Min(gridSize.y, walkwayStart + walkwayHeight);
-            if (yIndex >= walkwayStart && yIndex < walkwayEnd)
-            {
-                return _walkwaySprite;
-            }
-
+            if (yIndex >= walkwayStart && yIndex < walkwayEnd) return _walkwaySprite;
             return _backgroundSprite;
         }
 
         private void SpawnTile(Sprite sprite, Vector3 position)
         {
-            var go = new GameObject("Tile")
-            {
-                hideFlags = HideFlags.DontSave | HideFlags.HideInHierarchy
-            };
+            var go = new GameObject("Tile") { hideFlags = HideFlags.DontSave | HideFlags.HideInHierarchy };
             go.transform.SetParent(container);
             go.transform.localPosition = position;
             go.transform.localScale = Vector3.one * tileSize;
@@ -93,17 +90,11 @@ namespace BulletHeavenFortressDefense.Visuals
 
         private void ClearChildren()
         {
+            if (container == null) return;
             for (int i = container.childCount - 1; i >= 0; i--)
             {
                 var child = container.GetChild(i);
-                if (Application.isPlaying)
-                {
-                    Destroy(child.gameObject);
-                }
-                else
-                {
-                    DestroyImmediate(child.gameObject);
-                }
+                if (Application.isPlaying) Destroy(child.gameObject); else DestroyImmediate(child.gameObject);
             }
         }
 
@@ -112,7 +103,7 @@ namespace BulletHeavenFortressDefense.Visuals
             var texture = new Texture2D(1, 1, TextureFormat.RGBA32, false);
             texture.SetPixel(0, 0, color);
             texture.Apply();
-            return Sprite.Create(texture, new Rect(0, 0, 1, 1), new Vector2(0.5f, 0.5f), 1f);
+            return Sprite.Create(texture, new Rect(0, 0, 1, 1), new Vector2(0.5f, 0.5f), 1f, 0, SpriteMeshType.FullRect);
         }
     }
 }

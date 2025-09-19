@@ -14,6 +14,10 @@ namespace BulletHeavenFortressDefense.Systems
 
         private TowerData _pendingTower;
 
+        // Public read-only state so UI can avoid selecting immediately after placement
+        public bool HasPendingPlacement => _pendingTower != null;
+        public float LastPlacementTime { get; private set; } = -999f;
+
         public void QueueTowerPlacement(TowerData towerData)
         {
             _pendingTower = towerData;
@@ -68,8 +72,11 @@ namespace BulletHeavenFortressDefense.Systems
                 return true;
             }
 
-            if (!EconomySystem.Instance.TrySpend(_pendingTower.BuildCost))
+            int baseCost = _pendingTower.BuildCost;
+            int scaledCost = Mathf.RoundToInt(baseCost * EconomySystem.Instance.BuildCostGlobalMult);
+            if (!EconomySystem.Instance.TrySpend(scaledCost))
             {
+                Debug.Log($"[Placement] Not enough energy for {_pendingTower.DisplayName}. Need {scaledCost}, have {EconomySystem.Instance.CurrentEnergy}");
                 onPlacementFailed?.Raise();
                 return true;
             }
@@ -78,12 +85,14 @@ namespace BulletHeavenFortressDefense.Systems
             if (placed)
             {
                 onPlacementSucceeded?.Raise();
+                LastPlacementTime = Time.time;
                 _pendingTower = null;
                 HideAllSpots();
             }
             else
             {
-                EconomySystem.Instance.Add(_pendingTower.BuildCost);
+                // refund scaled cost if failed
+                EconomySystem.Instance.Add(scaledCost);
                 onPlacementFailed?.Raise();
                 // Keep spots visible for another attempt
             }

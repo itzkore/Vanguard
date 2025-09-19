@@ -2,6 +2,7 @@
 using UnityEngine;
 using BulletHeavenFortressDefense.Utilities;
 using BulletHeavenFortressDefense.Entities;
+using UnityEngine.UI; // needed for Canvas/Button/Image/Text/GraphicRaycaster/CanvasScaler
 
 namespace BulletHeavenFortressDefense.Fortress
 {
@@ -9,7 +10,13 @@ namespace BulletHeavenFortressDefense.Fortress
     {
         [SerializeField] private FortressConfig config;
         [Header("Core Settings")]
-        [SerializeField, Range(0.1f, 1f)] private float coreVisualScale = 0.35f; // make core look smaller while keeping barrier full-size
+        [SerializeField, Range(0.1f, 1f)] private float coreVisualScale = 0.35f;
+        [Header("Layout Scaling")]
+        [Tooltip("Uniform scale applied to fallback fortress cells (walls & mounts). 1 = previous size.")]
+        [SerializeField, Range(0.5f, 4f)] private float wallScale = 1.0f;
+        [Header("Auto Alignment")]
+        [SerializeField, Tooltip("If true, fortress will always be horizontally aligned flush to the left camera edge (with optional padding) regardless of resolution/aspect.")] private bool autoAlignLeft = true;
+        [SerializeField, Tooltip("Extra world-unit padding from the absolute left edge of the camera when autoAlignLeft is on.")] private float leftPadding = 0f;
 
         private readonly List<FortressWall> _walls = new();
         private readonly List<FortressMount> _mounts = new();
@@ -18,6 +25,13 @@ namespace BulletHeavenFortressDefense.Fortress
     private int _cols;
     private int _coreRow;
     private int _coreCol;
+    private Vector2 _cellSpacing; // cached spacing used when building
+    private int _lastScreenW = -1;
+    private int _lastScreenH = -1;
+    // Breach tracking: enemies can head for core if either the middle wall (to the right of the core) is destroyed,
+    // or at least two walls in total are destroyed.
+    private int _destroyedWallsCount;
+    private bool _middleWallDestroyed;
 
         public FortressConfig Config => config;
         public IReadOnlyList<FortressMount> Mounts => _mounts;
@@ -35,6 +49,15 @@ namespace BulletHeavenFortressDefense.Fortress
             BuildFortress();
         }
 
+        private void Update()
+        {
+            if (!autoAlignLeft || !_built) return;
+            if (Screen.width != _lastScreenW || Screen.height != _lastScreenH)
+            {
+                AlignLeft();
+            }
+        }
+
         private void BuildFortress()
         {
             if (_built)
@@ -43,6 +66,10 @@ namespace BulletHeavenFortressDefense.Fortress
             }
 
             ClearExisting();
+
+            // Reset breach tracking when (re)building
+            _destroyedWallsCount = 0;
+            _middleWallDestroyed = false;
 
             int rows;
             int cols;
@@ -69,49 +96,32 @@ namespace BulletHeavenFortressDefense.Fortress
                 // Fallback defaults if no config is assigned
                 rows = 3;
                 cols = 2;
-                // Unit-sized cells for tight tiling
-                float cell = 1.0f;
-                spacing = new Vector2(cell, cell);
-                // Anchor to the left side of the viewport and center vertically
+                float baseCell = 1.0f * wallScale; // scaled cell size
+                spacing = new Vector2(baseCell, baseCell);
                 var cam = Camera.main;
                 if (cam != null)
                 {
                     float depth = cam.orthographic ? 0f : Mathf.Abs(cam.transform.position.z);
                     var leftEdge = cam.ViewportToWorldPoint(new Vector3(0f, 0.5f, depth));
                     var mid = cam.ViewportToWorldPoint(new Vector3(0.5f, 0.5f, depth));
-                    // origin is bottom-left cell center; align left column to touch the viewport edge
                     float totalHeight = (rows - 1) * spacing.y;
-                    float originX = leftEdge.x + (spacing.x * 0.5f);
+                    float originX = leftEdge.x + (spacing.x * 0.5f); // keep left column flush
                     float originY = mid.y - (totalHeight * 0.5f);
                     origin = new Vector3(originX, originY, 0f);
                 }
-                else
-                {
-                    origin = transform.position;
-                }
-                // Core at [row 1, col 0]
-                coreRow = 1;
-                coreCol = 0;
-
-                // Try to find prefabs in known path
+                else { origin = transform.position; }
+                coreRow = 1; coreCol = 0;
                 corePrefab = Resources.Load<GameObject>("Prefabs/Fortress/FortressCore");
-                if (corePrefab == null)
-                {
-                    // As a last resort, instantiate an empty object as core marker
-                    corePrefab = new GameObject("FortressCoreFallback");
-                }
-
+                if (corePrefab == null) corePrefab = new GameObject("FortressCoreFallback");
                 var wallPrefabObj = Resources.Load<GameObject>("Prefabs/Fortress/FortressWall");
-                if (wallPrefabObj != null)
-                {
-                    wallPrefab = wallPrefabObj.GetComponent<FortressWall>();
-                }
+                if (wallPrefabObj != null) wallPrefab = wallPrefabObj.GetComponent<FortressWall>();
             }
 
             _rows = rows;
             _cols = cols;
             _coreRow = coreRow;
             _coreCol = coreCol;
+            _cellSpacing = spacing;
 
             for (int row = 0; row < rows; row++)
             {
@@ -134,11 +144,20 @@ namespace BulletHeavenFortressDefense.Fortress
             _built = true;
             Debug.Log($"Fortress built: walls={_walls.Count}, mounts={_mounts.Count}", this);
 
+            if (autoAlignLeft)
+            {
+                AlignLeft();
+            }
+
             EnsureWallsHUD();
         }
 
         private void ClearExisting()
         {
+            // Reset breach tracking
+            _destroyedWallsCount = 0;
+            _middleWallDestroyed = false;
+
             _walls.Clear();
             _mounts.Clear();
 
@@ -271,9 +290,11 @@ namespace BulletHeavenFortressDefense.Fortress
                 var wallGo = new GameObject($"FortressWall_{row}_{column}");
                 wallGo.transform.SetParent(transform);
                 wallGo.transform.position = position;
+                wallGo.transform.localScale = Vector3.one * wallScale; // apply scale to whole wall cluster
 
                 var renderer = wallGo.AddComponent<SpriteRenderer>();
-                renderer.sprite = CreateSolidSprite(new Color(0.40f, 0.50f, 0.70f, 1f));
+                // Procedural dark gray brick texture instead of flat beige
+                renderer.sprite = CreateBrickSprite();
                 renderer.sortingOrder = 0;
 
                 wallInstance = wallGo.AddComponent<FortressWall>();
@@ -346,11 +367,55 @@ namespace BulletHeavenFortressDefense.Fortress
 
         internal void NotifyWallDestroyed(FortressWall wall)
         {
-            if (wall != null && _mounts.Contains(wall.Mount))
+            if (wall == null) return;
+            // Count unique destroyed walls by scanning, but keep a fast counter too
+            _destroyedWallsCount = Mathf.Max(_destroyedWallsCount + 1, 0);
+
+            // If this is the wall immediately to the right of the core row/col, mark as middle breach
+            if (wall.Row == _coreRow && wall.Column == _coreCol + 1)
             {
-                // Wall keeps the mount reference, but mount disables placement until repaired.
+                _middleWallDestroyed = true;
             }
+            // Wall keeps the mount reference, but mount disables placement until repaired.
         }
+
+        internal void NotifyWallRepaired(FortressWall wall)
+        {
+            if (wall == null) return;
+            _destroyedWallsCount = Mathf.Max(0, _destroyedWallsCount - 1);
+            if (wall.Row == _coreRow && wall.Column == _coreCol + 1)
+            {
+                // Middle wall was repaired; mark false unless some other logic re-sets it later
+                _middleWallDestroyed = false;
+            }
+            // As a safety net, recompute flags in case of mismatch
+            RecomputeBreachState();
+        }
+
+        private void RecomputeBreachState()
+        {
+            int destroyed = 0;
+            bool middle = false;
+            for (int i = 0; i < _walls.Count; i++)
+            {
+                var w = _walls[i];
+                if (w == null) continue;
+                if (w.IsDestroyed)
+                {
+                    destroyed++;
+                    if (w.Row == _coreRow && w.Column == _coreCol + 1)
+                    {
+                        middle = true;
+                    }
+                }
+            }
+            _destroyedWallsCount = destroyed;
+            _middleWallDestroyed = middle;
+        }
+
+        public int DestroyedWallsCount => _destroyedWallsCount;
+        public bool MiddleWallDestroyed => _middleWallDestroyed;
+        public bool IsCoreBreachable => _middleWallDestroyed || _destroyedWallsCount >= 2;
 
         [ContextMenu("Rebuild Fortress")]
         private void ContextRebuild()
@@ -364,7 +429,38 @@ namespace BulletHeavenFortressDefense.Fortress
             var tex = new Texture2D(1, 1, TextureFormat.RGBA32, false);
             tex.SetPixel(0, 0, color);
             tex.Apply();
-            return Sprite.Create(tex, new Rect(0, 0, 1, 1), new Vector2(0.5f, 0.5f), 1f);
+            return Sprite.Create(tex, new Rect(0, 0, 1, 1), new Vector2(0.5f, 0.5f), 1f, 0, SpriteMeshType.FullRect);
+        }
+
+        private Sprite CreateBrickSprite()
+        {
+            // 32x32 texture with 8x4 brick layout (each brick 4x8 px) dark gray mortar lines
+            int w = 64; int h = 64;
+            var tex = new Texture2D(w, h, TextureFormat.RGBA32, false);
+            Color brick = new Color(0.22f, 0.22f, 0.24f, 1f); // primary brick
+            Color brick2 = new Color(0.26f, 0.26f, 0.28f, 1f); // subtle variation
+            Color mortar = new Color(0.08f, 0.08f, 0.09f, 1f);
+            int rows = 8; int cols = 8; // bricks grid
+            int brickH = h / rows; int brickW = w / cols;
+            for (int y = 0; y < h; y++)
+            {
+                for (int x = 0; x < w; x++)
+                {
+                    bool mortarLine = (y % brickH == 0) || (x % brickW == 0);
+                    if (mortarLine)
+                    {
+                        tex.SetPixel(x, y, mortar);
+                    }
+                    else
+                    {
+                        int cy = y / brickH; int cx = x / brickW;
+                        bool alt = (cx + cy) % 2 == 0;
+                        tex.SetPixel(x, y, alt ? brick : brick2);
+                    }
+                }
+            }
+            tex.Apply();
+            return Sprite.Create(tex, new Rect(0,0,w,h), new Vector2(0.5f,0.5f), 64f, 0, SpriteMeshType.FullRect);
         }
 
         private Sprite CreateCircleSprite(Color color, int size = 32)
@@ -389,14 +485,14 @@ namespace BulletHeavenFortressDefense.Fortress
                 }
             }
             tex.Apply();
-            return Sprite.Create(tex, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f), size);
+            return Sprite.Create(tex, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f), size, 0, SpriteMeshType.FullRect);
         }
 
         private void CreateMount(Transform parent, Vector2 localPos)
         {
             var mountGo = new GameObject("Mount");
             mountGo.transform.SetParent(parent);
-            mountGo.transform.localPosition = localPos;
+            mountGo.transform.localPosition = localPos * wallScale; // keep relative spacing proportional
             var box = mountGo.AddComponent<BoxCollider2D>();
             box.isTrigger = true;
             var vis = mountGo.AddComponent<Fortress.MountSpotVisual>();
@@ -409,8 +505,8 @@ namespace BulletHeavenFortressDefense.Fortress
         {
             var seg = new GameObject("Segment");
             seg.transform.SetParent(parent);
-            seg.transform.localPosition = localPos;
-            seg.transform.localScale = Vector3.one * 0.45f;
+            seg.transform.localPosition = localPos * wallScale;
+            seg.transform.localScale = Vector3.one * 0.45f * wallScale;
             var sr = seg.AddComponent<SpriteRenderer>();
             sr.sprite = CreateSolidSprite(new Color(1f, 1f, 1f, 0.08f));
             sr.sortingOrder = -1; // under mounts/towers
@@ -426,6 +522,9 @@ namespace BulletHeavenFortressDefense.Fortress
         public int CoreRow => _coreRow;
         public int CoreColumn => _coreCol;
 
+        [Header("UI Options")] 
+        [SerializeField, Tooltip("If false, the top-left 'Menu' button (pause toggle) will NOT be created.")] private bool createTopLeftMenuButton = false;
+
         private void EnsureWallsHUD()
         {
             if (FindObjectOfType<BulletHeavenFortressDefense.UI.WallsHealthHUD>() != null)
@@ -436,6 +535,95 @@ namespace BulletHeavenFortressDefense.Fortress
             var hudRoot = new GameObject("WallsHealthHUD");
             hudRoot.transform.SetParent(null); // top-level UI object
             hudRoot.AddComponent<BulletHeavenFortressDefense.UI.WallsHealthHUD>();
+            if (createTopLeftMenuButton)
+            {
+                CreateAdjacentMenuButton();
+            }
+        }
+
+        private void CreateAdjacentMenuButton()
+        {
+            if (GameObject.Find("TopLeftMenuButtonCanvas") != null) return;
+            var canvasGO = new GameObject("TopLeftMenuButtonCanvas", typeof(RectTransform));
+            canvasGO.layer = LayerMask.NameToLayer("UI");
+            var canvas = canvasGO.AddComponent<Canvas>();
+            canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+            canvas.sortingOrder = 610;
+            var scaler = canvasGO.AddComponent<CanvasScaler>();
+            scaler.uiScaleMode = CanvasScaler.ScaleMode.ConstantPixelSize;
+            canvasGO.AddComponent<GraphicRaycaster>();
+            var rt = canvasGO.GetComponent<RectTransform>();
+            rt.anchorMin = new Vector2(0f,1f); rt.anchorMax = new Vector2(0f,1f); rt.pivot = new Vector2(0f,1f);
+            rt.anchoredPosition = new Vector2(170f, -8f);
+
+            var btnGO = new GameObject("MenuButton", typeof(RectTransform));
+            var btnRT = btnGO.GetComponent<RectTransform>();
+            btnRT.SetParent(canvasGO.transform,false);
+            btnRT.sizeDelta = new Vector2(112f,40f);
+            btnRT.anchorMin = new Vector2(0f,1f); btnRT.anchorMax = new Vector2(0f,1f); btnRT.pivot = new Vector2(0f,1f);
+            btnRT.anchoredPosition = Vector2.zero;
+            var img = btnGO.AddComponent<Image>();
+            img.color = new Color(0.12f,0.14f,0.18f,0.95f);
+            var btn = btnGO.AddComponent<Button>();
+            var cols = btn.colors; cols.highlightedColor = new Color(0.22f,0.26f,0.32f,1f); cols.pressedColor = new Color(0.05f,0.06f,0.08f,1f); btn.colors = cols;
+            var textGO = new GameObject("Label", typeof(RectTransform));
+            var textRT = textGO.GetComponent<RectTransform>();
+            textRT.SetParent(btnRT,false); textRT.anchorMin = Vector2.zero; textRT.anchorMax = Vector2.one; textRT.offsetMin = Vector2.zero; textRT.offsetMax = Vector2.zero;
+            var txt = textGO.AddComponent<Text>();
+            txt.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            txt.text = "Menu"; txt.alignment = TextAnchor.MiddleCenter; txt.color = Color.white; txt.fontSize = 20;
+
+            var pause = Object.FindObjectOfType<BulletHeavenFortressDefense.UI.PauseMenu>();
+            if (pause == null)
+            {
+                var pmGO = new GameObject("PauseMenu");
+                pause = pmGO.AddComponent<BulletHeavenFortressDefense.UI.PauseMenu>();
+            }
+            btn.onClick.AddListener(() => { if (Time.timeScale == 0f) pause.Resume(); else pause.Pause(); });
+        }
+
+        private void AlignLeft()
+        {
+            var cam = Camera.main;
+            if (cam == null) return;
+            float depth = cam.orthographic ? 0f : Mathf.Abs(cam.transform.position.z - transform.position.z);
+            float camLeft = cam.ViewportToWorldPoint(new Vector3(0f, 0.5f, depth)).x + leftPadding;
+
+            // Find current left-most wall (or core) center X (column 0)
+            float minX = float.PositiveInfinity;
+            for (int i = 0; i < _walls.Count; i++)
+            {
+                var w = _walls[i];
+                if (w == null) continue;
+                if (w.Column == 0)
+                {
+                    float x = w.transform.position.x;
+                    if (x < minX) minX = x;
+                }
+            }
+            // Include core if it sits in column 0
+            if (_coreCol == 0)
+            {
+                // try to locate core via name or BaseCore component
+                var core = GetComponentInChildren<BaseCore>();
+                if (core != null)
+                {
+                    float cx = core.transform.position.x;
+                    if (cx < minX) minX = cx;
+                }
+            }
+            if (float.IsInfinity(minX)) return; // nothing built yet
+
+            // Desired center of column 0 cell should be camLeft + half cell width (spacing.x * 0.5)
+            float halfCell = _cellSpacing.x * 0.5f;
+            float desiredCol0Center = camLeft + halfCell;
+            float delta = desiredCol0Center - minX;
+            if (Mathf.Abs(delta) > 0.0001f)
+            {
+                transform.position += new Vector3(delta, 0f, 0f);
+            }
+            _lastScreenW = Screen.width;
+            _lastScreenH = Screen.height;
         }
     }
 }

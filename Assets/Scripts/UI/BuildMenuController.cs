@@ -4,6 +4,9 @@ using UnityEngine.UI;
 using BulletHeavenFortressDefense.Data;
 using BulletHeavenFortressDefense.Managers;
 using BulletHeavenFortressDefense.Systems;
+#if UNITY_EDITOR
+using UnityEditor;
+#endif
 
 namespace BulletHeavenFortressDefense.UI
 {
@@ -21,18 +24,23 @@ namespace BulletHeavenFortressDefense.UI
             public TowerData Tower;
             public Button Button;
             public Text Label;
+            public Image Icon;
         }
 
         private void Awake()
         {
             if (contentRoot == null)
             {
-                contentRoot = transform as RectTransform;
+                // Try to auto-bind to ScrollView/Viewport/Content if present
+                var content = transform.Find("ScrollView/Viewport/Content") as RectTransform;
+                contentRoot = content != null ? content : (transform as RectTransform);
             }
+            Debug.Log($"[BuildMenu] Awake. contentRoot={(contentRoot != null ? contentRoot.name : "<null>")}");
 
             if (towerButtonPrefab == null)
             {
                 towerButtonPrefab = CreateTemplateButton();
+                Debug.Log("[BuildMenu] Created template button prefab.");
             }
         }
 
@@ -58,19 +66,92 @@ namespace BulletHeavenFortressDefense.UI
         {
             Clear();
 
+            // Ensure UI bindings even if Awake hasn't run yet (ordering safety)
+            if (contentRoot == null)
+            {
+                var content = transform.Find("ScrollView/Viewport/Content") as RectTransform;
+                contentRoot = content != null ? content : (transform as RectTransform);
+            }
+            if (contentRoot == null)
+            {
+                Debug.LogWarning("[BuildMenu] No contentRoot found. Expected 'ScrollView/Viewport/Content'.");
+                return;
+            }
+            if (towerButtonPrefab == null)
+            {
+                towerButtonPrefab = CreateTemplateButton();
+            }
+
+            // Ensure we have a TowerManager instance
             if (!TowerManager.HasInstance)
             {
+                var go = new GameObject("TowerManager");
+                go.AddComponent<TowerManager>();
+                Debug.Log("[BuildMenu] TowerManager was missing; created new instance.") ;
+            }
+            // Force lazy resolution so _instance is set even if Awake hasn't run yet
+            var manager = TowerManager.Instance;
+            if (manager == null)
+            {
+                Debug.LogWarning("[BuildMenu] No TowerManager instance after creation attempt.");
+                ShowEmptyState("No tower manager found");
                 return;
             }
 
-            foreach (var tower in TowerManager.Instance.UnlockedTowers)
+            var towers = manager.UnlockedTowers;
+            Debug.Log($"[BuildMenu] Refresh with towers count: {(towers != null ? towers.Count : -1)}");
+            List<TowerData> source = null;
+            if (towers != null && towers.Count > 0)
+            {
+                source = new List<TowerData>(towers);
+            }
+#if UNITY_EDITOR
+            else
+            {
+                // Editor fallback: find all TowerData assets so UI always has content during dev
+                source = new List<TowerData>();
+                var guids = AssetDatabase.FindAssets("t:TowerData");
+                foreach (var guid in guids)
+                {
+                    var path = AssetDatabase.GUIDToAssetPath(guid);
+                    var asset = AssetDatabase.LoadAssetAtPath<TowerData>(path);
+                    if (asset != null && !source.Contains(asset)) source.Add(asset);
+                }
+                Debug.Log($"[BuildMenu] Editor fallback loaded towers: {source.Count}");
+            }
+#endif
+
+            if (source == null || source.Count == 0)
+            {
+                ShowEmptyState("No turrets unlocked");
+                return;
+            }
+
+            foreach (var tower in source)
             {
                 var button = Instantiate(towerButtonPrefab, contentRoot);
                 button.gameObject.SetActive(true);
-                var label = button.GetComponentInChildren<Text>();
+                var label = button.transform.Find("Label")?.GetComponent<Text>();
+                var icon = button.transform.Find("Icon")?.GetComponent<Image>();
+                Debug.Log($"[BuildMenu] Add card for: {tower?.name} (Display={tower?.DisplayName})");
                 if (label != null)
                 {
-                    label.text = $"{tower.DisplayName} ({tower.BuildCost})";
+                    int scaled = EconomySystem.HasInstance ? EconomySystem.Instance.GetScaledBuildCost(tower) : tower.BuildCost;
+                    label.text = $"{tower.DisplayName} (€ {scaled})";
+                }
+                if (icon != null)
+                {
+                    icon.sprite = tower.Icon;
+                    icon.enabled = tower.Icon != null;
+                    // Simple tint to highlight if no icon
+                    if (tower.Icon == null)
+                    {
+                        icon.color = new Color(1f, 1f, 1f, 0.15f);
+                    }
+                    else
+                    {
+                        icon.color = Color.white;
+                    }
                 }
 
                 button.onClick.AddListener(() => OnTowerButtonPressed(tower));
@@ -79,7 +160,8 @@ namespace BulletHeavenFortressDefense.UI
                 {
                     Tower = tower,
                     Button = button,
-                    Label = label
+                    Label = label,
+                    Icon = icon
                 });
             }
         }
@@ -87,6 +169,16 @@ namespace BulletHeavenFortressDefense.UI
         private void OnTowerButtonPressed(TowerData tower)
         {
             PlacementSystem.Instance.QueueTowerPlacement(tower);
+            // If we're inside the modal dialog, close the overlay
+            var dialog = transform.parent;
+            while (dialog != null && dialog.name != "TurretDialog")
+            {
+                dialog = dialog.parent;
+            }
+            if (dialog != null)
+            {
+                dialog.gameObject.SetActive(false);
+            }
         }
 
         private void OnEnergyChanged(int currentEnergy)
@@ -98,7 +190,8 @@ namespace BulletHeavenFortressDefense.UI
                     continue;
                 }
 
-                bool affordable = currentEnergy >= entry.Tower.BuildCost;
+                int scaled = EconomySystem.HasInstance ? EconomySystem.Instance.GetScaledBuildCost(entry.Tower) : entry.Tower.BuildCost;
+                bool affordable = currentEnergy >= scaled;
                 entry.Button.interactable = affordable;
                 if (entry.Label != null)
                 {
@@ -109,6 +202,12 @@ namespace BulletHeavenFortressDefense.UI
 
         private void Clear()
         {
+            // Remove any previous empty-state labels
+            var empty = contentRoot != null ? contentRoot.Find("EmptyState") : null;
+            if (empty != null)
+            {
+                Destroy(empty.gameObject);
+            }
             foreach (var entry in _spawnedButtons)
             {
                 if (entry.Button != null)
@@ -120,6 +219,26 @@ namespace BulletHeavenFortressDefense.UI
             _spawnedButtons.Clear();
         }
 
+        private void ShowEmptyState(string message)
+        {
+            if (contentRoot == null) return;
+            var existing = contentRoot.Find("EmptyState");
+            if (existing != null)
+            {
+                Destroy(existing.gameObject);
+            }
+            var labelGO = new GameObject("EmptyState", typeof(RectTransform));
+            labelGO.transform.SetParent(contentRoot, false);
+            var rect = labelGO.GetComponent<RectTransform>();
+            rect.sizeDelta = new Vector2(360f, 48f);
+            var text = labelGO.AddComponent<Text>();
+            text.text = message;
+            text.alignment = TextAnchor.MiddleCenter;
+            text.color = new Color(1f,1f,1f,0.7f);
+            text.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            text.fontSize = 26;
+        }
+
         private Button CreateTemplateButton()
         {
             var buttonGO = new GameObject("TowerButtonTemplate", typeof(RectTransform));
@@ -127,31 +246,48 @@ namespace BulletHeavenFortressDefense.UI
             var rect = buttonGO.GetComponent<RectTransform>();
             rect.anchorMin = new Vector2(0f, 0f);
             rect.anchorMax = new Vector2(1f, 1f);
-            rect.sizeDelta = new Vector2(240f, 48f);
-            var layoutElement = buttonGO.AddComponent<LayoutElement>();
-            layoutElement.preferredWidth = 220f;
-            layoutElement.minWidth = 200f;
-            layoutElement.preferredHeight = 48f;
-            layoutElement.minHeight = 44f;
+            rect.sizeDelta = new Vector2(360f, 72f);
 
-            var image = buttonGO.AddComponent<Image>();
-            image.color = new Color(0.2f, 0.24f, 0.32f, 0.85f);
+            var layoutElement = buttonGO.AddComponent<LayoutElement>();
+            layoutElement.preferredWidth = 360f;
+            layoutElement.minWidth = 280f;
+            layoutElement.preferredHeight = 72f;
+            layoutElement.minHeight = 64f;
+
+            // Background
+            var bg = buttonGO.AddComponent<Image>();
+            bg.color = new Color(0.2f, 0.24f, 0.32f, 0.85f);
             var button = buttonGO.AddComponent<Button>();
 
+            // Icon on the left
+            var iconGO = new GameObject("Icon", typeof(RectTransform));
+            iconGO.transform.SetParent(buttonGO.transform, false);
+            var iconRect = iconGO.GetComponent<RectTransform>();
+            iconRect.anchorMin = new Vector2(0f, 0.5f);
+            iconRect.anchorMax = new Vector2(0f, 0.5f);
+            iconRect.pivot = new Vector2(0f, 0.5f);
+            iconRect.anchoredPosition = new Vector2(10f, 0f);
+            iconRect.sizeDelta = new Vector2(52f, 52f);
+            var iconImage = iconGO.AddComponent<Image>();
+            iconImage.color = Color.white;
+            iconImage.raycastTarget = false;
+
+            // Label on the right
             var labelGO = new GameObject("Label", typeof(RectTransform));
             labelGO.transform.SetParent(buttonGO.transform, false);
             var labelRect = labelGO.GetComponent<RectTransform>();
-            labelRect.anchorMin = Vector2.zero;
-            labelRect.anchorMax = Vector2.one;
-            labelRect.offsetMin = new Vector2(8f, 4f);
-            labelRect.offsetMax = new Vector2(-8f, -4f);
+            labelRect.anchorMin = new Vector2(0f, 0f);
+            labelRect.anchorMax = new Vector2(1f, 1f);
+            labelRect.offsetMin = new Vector2(72f, 8f); // leave space for icon
+            labelRect.offsetMax = new Vector2(-10f, -8f);
 
             var text = labelGO.AddComponent<Text>();
-            text.text = "Tower";
+            text.text = "Tower (0)";
             text.alignment = TextAnchor.MiddleLeft;
             text.color = affordableColor;
             text.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
             text.fontSize = 28;
+            text.raycastTarget = false;
 
             buttonGO.SetActive(false);
             return button;

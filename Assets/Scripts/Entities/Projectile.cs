@@ -16,6 +16,10 @@ namespace BulletHeavenFortressDefense.Entities
         private Vector3 _direction = Vector3.right;
         private string _poolId;
 
+    // Expose read-only accessors so other systems can match this projectile's behavior
+    public float Speed => speed;
+    public float MaxLifetime => maxLifetime;
+
         public void Initialize(TowerData source, Vector3 direction, string poolId)
         {
             _damage = source?.Damage ?? 0f;

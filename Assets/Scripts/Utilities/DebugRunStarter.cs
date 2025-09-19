@@ -13,8 +13,9 @@ namespace BulletHeavenFortressDefense.Debugging
         private void Start()
         {
             QueueTower();
+            // StartRun already triggers WaveManager.StartSequence(); avoid double-start which was resetting wave number.
             GameManager.Instance.StartRun();
-            WaveManager.Instance.StartSequence();
+            // Removed explicit WaveManager.Instance.StartSequence();
             if (queueInterval > 0f)
             {
                 InvokeRepeating(nameof(QueueTower), queueInterval, queueInterval);

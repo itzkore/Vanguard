@@ -177,7 +177,13 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   startingEnergy: 100
+  buildCostGlobalMult: 10
+  upgradeCostGlobalMult: 1
   onEnergyChanged: {fileID: 0}
+  perWaveBonus: 10
+  perWaveBonusGrowth: 0.25
+  killRewardWaveScale: 0.05
+  minKillReward: 1
 --- !u!114 &330902678
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -210,6 +216,13 @@ MonoBehaviour:
   enemySpawnPoints:
   - {fileID: 1902998711}
   towerSpawnPoints: []
+  rightEdgeWorldX: 0
+  verticalEdgePadding: 0.5
+  avoidOverlapOnRightEdge: 1
+  overlapCheckRadius: 0.22
+  autoCreateRightEdgePoints: 1
+  rightEdgePointsCount: 20
+  rightEdgeHorizontalSpacing: 0.75
 --- !u!114 &330902680
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -226,10 +239,13 @@ MonoBehaviour:
   - {fileID: 11400000, guid: a552ab6d2194fa94082fe7b18e13ccd1, type: 2}
   - {fileID: 11400000, guid: 0460350679a8e084ab0ba69a5b1230d1, type: 2}
   - {fileID: 11400000, guid: 815aff78b239251448f7f43c5a3172b8, type: 2}
+  - {fileID: 11400000, guid: a552ab6d2194fa94082fe7b18e13ccd1, type: 2}
+  additionalTowers: []
   placementMask:
     serializedVersion: 2
     m_Bits: 0
   placementRadius: 0.45
+  towerSortingOrder: 5
 --- !u!114 &330902682
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -245,6 +261,8 @@ MonoBehaviour:
   initialState: 0
   onRunStarted: {fileID: 0}
   onRunEnded: {fileID: 0}
+  loadMainMenuScene: 0
+  mainMenuSceneName: MainMenu
 --- !u!4 &330902683
 Transform:
   m_ObjectHideFlags: 0
@@ -350,8 +368,23 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   waveSequence: {fileID: 11400000, guid: fe402e8047f69e748b671c24bec392d0, type: 2}
   interWaveDelay: 4
+  loopSequence: 1
+  onPhaseChanged: {fileID: 0}
   onWaveStarted: {fileID: 0}
   onWaveCompleted: {fileID: 0}
+  autoGenerateSequence: 1
+  defaultEnemyData: {fileID: 0}
+  targetAutoWaves: 100
+  autoShopSeconds: 12
+  autoPrepSeconds: 5
+  autoPostSeconds: 4
+  extendExistingWithAuto: 1
+  verboseLogging: 0
+  autoDestroyExtras: 1
+  rightEdgeExtraOffset: 4
+  minEnemySpawnX: -9999
+  forceRightEdgeColumn: 1
+  rightEdgeRandomInsetMax: 0.2
 --- !u!1 &791167535
 GameObject:
   m_ObjectHideFlags: 0
@@ -550,6 +583,54 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_RootOrder: 0
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &1047173759
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1047173761}
+  - component: {fileID: 1047173760}
+  m_Layer: 0
+  m_Name: FXRoot
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &1047173760
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1047173759}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c1c63c3673c863c46a1d5408b204a91c, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  damageTextPrefab: {fileID: -9126141028814270343, guid: aa8bf8e69e901bb41a392c2fd56fd5fa, type: 3}
+  poolSize: 64
+  yOffset: 0.4
+  textParent: {fileID: 0}
+--- !u!4 &1047173761
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1047173759}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 2.0756261, y: -3.7785475, z: 1.5109656}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_RootOrder: 6
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1902998710
 GameObject:

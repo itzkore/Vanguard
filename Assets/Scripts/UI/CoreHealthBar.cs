@@ -1,6 +1,7 @@
 using UnityEngine;
 using UnityEngine.UI;
 using BulletHeavenFortressDefense.Entities;
+using BulletHeavenFortressDefense.Managers; // for GameManager
 
 namespace BulletHeavenFortressDefense.UI
 {
@@ -46,7 +47,19 @@ namespace BulletHeavenFortressDefense.UI
         private void LateUpdate()
         {
             var core = BaseCore.Instance ?? _core;
-            if (core == null || canvasRoot == null) return;
+            if (core == null)
+            {
+                // Attempt to discover if spawned late
+                var found = FindObjectOfType<BaseCore>();
+                if (found != null)
+                {
+                    _core = found;
+                    found.HealthChanged += OnHealthChanged;
+                    OnHealthChanged(found.CurrentHealth, found.MaxHealth);
+                }
+                return;
+            }
+            if (canvasRoot == null) return;
 
             // Compute core visual diameter in world units
             float diameter = GetCoreVisualDiameter(core);
@@ -67,9 +80,25 @@ namespace BulletHeavenFortressDefense.UI
             if (fill == null) return;
             float pct = max > 0 ? Mathf.Clamp01((float)current / max) : 0f;
             fill.fillAmount = pct;
-            // Color from green -> yellow -> red
-            fill.color = pct >= 0.5f ? Color.Lerp(Color.yellow, Color.green, (pct - 0.5f) / 0.5f)
-                                     : Color.Lerp(Color.red, Color.yellow, pct / 0.5f);
+            // Color gradient green -> yellow -> red
+            Color col;
+            if (pct > 0.5f)
+            {
+                float t = (pct - 0.5f) / 0.5f; // 0..1 from 50% to 100%
+                col = Color.Lerp(new Color(0.95f,0.8f,0.15f), new Color(0.2f,0.9f,0.35f), t);
+            }
+            else
+            {
+                float t = pct / 0.5f; // 0..1 from 0% to 50%
+                col = Color.Lerp(new Color(0.85f,0.15f,0.15f), new Color(0.95f,0.8f,0.15f), t);
+            }
+            fill.color = col;
+            if (pct <= 0f && GameManager.HasInstance && GameManager.Instance.CurrentState != BulletHeavenFortressDefense.Managers.GameManager.GameState.GameOver)
+            {
+                // Failsafe in case BaseCore event chain missed EndRun
+                Debug.LogWarning("[CoreHealthBar] HP reached 0 but GameOver not triggered yet. Forcing EndRun().");
+                GameManager.Instance.EndRun();
+            }
         }
 
         private void EnsureCanvas()
@@ -88,7 +117,7 @@ namespace BulletHeavenFortressDefense.UI
             var barBG = new GameObject("BarBG", typeof(Image));
             barBG.transform.SetParent(canvasRoot, false);
             var bgImg = barBG.GetComponent<Image>();
-            bgImg.color = new Color(0f, 0f, 0f, 0.45f);
+            bgImg.color = Color.black;
             _bgRect = barBG.GetComponent<RectTransform>();
             _bgRect.sizeDelta = new Vector2(0.5f, 0.08f); // provisional, will be resized in LateUpdate
             _bgRect.pivot = new Vector2(0.5f, 0.5f);
@@ -99,6 +128,8 @@ namespace BulletHeavenFortressDefense.UI
             fill.color = Color.green;
             fill.type = Image.Type.Filled;
             fill.fillMethod = Image.FillMethod.Horizontal;
+            // Deplete to the left
+            fill.fillOrigin = (int)Image.OriginHorizontal.Right;
             fill.fillAmount = 1f;
             var fillRect = barFill.GetComponent<RectTransform>();
             fillRect.anchorMin = new Vector2(0f, 0f);

@@ -29,7 +29,7 @@ Transform:
   m_GameObject: {fileID: 3992177159941443300}
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 1.4883393, y: -3.541525, z: 1.5180172}
-  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_LocalScale: {x: 1.5, y: 1.5, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 0}
@@ -77,7 +77,7 @@ SpriteRenderer:
   m_SortingLayer: 0
   m_SortingOrder: 0
   m_Sprite: {fileID: 10905, guid: 0000000000000000f000000000000000, type: 0}
-  m_Color: {r: 0.9716981, g: 0, b: 0, a: 1}
+  m_Color: {r: 0.0933701, g: 0.5283019, b: 0.037379846, a: 1}
   m_FlipX: 0
   m_FlipY: 0
   m_DrawMode: 0
@@ -147,5 +147,20 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   body: {fileID: 172075464725085248}
-  moveSpeed: 1.5
-  contactDamage: 10
+  moveSpeed: 1
+  speedGlobalMultiplier: 2
+  contactDamage: 5
+  clampLeftToViewport: 1
+  leftViewportPadding: 0.05
+  muzzle: {fileID: 0}
+  projectileDamageMultiplier: 0.4
+  stopDistanceToWall: 0.35
+  steerToNearestWall: 1
+  steerWeight: 0.92
+  yAlignEpsilon: 0.03
+  turnRateDegreesPerSecond: 720
+  meleeRange: 0.45
+  meleeDamageMult: 1.5
+  disableRangedInMelee: 1
+  meleeExitBuffer: 0.1
+  coreMeleeRangeMultiplier: 2.2
