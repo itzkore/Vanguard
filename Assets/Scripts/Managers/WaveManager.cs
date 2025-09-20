@@ -46,6 +46,8 @@ namespace BulletHeavenFortressDefense.Managers
     [SerializeField, Tooltip("If true, early waves use a reduced right-edge offset so enemies appear sooner.")] private bool earlyWaveFastStart = true;
     [SerializeField, Tooltip("Number of initial waves to apply fast-start adjustments to.")] private int fastStartWaves = 2;
     [SerializeField, Tooltip("Override right-edge extra offset for early waves (typically 0 to 0.75)." )] private float earlyWaveRightEdgeOffset = 0.75f;
+    [SerializeField, Tooltip("For wave 1 only: instantly spawn this many enemies from the FIRST spawn entry before normal spawning begins (gives immediate action). 0 = disabled.")] private int firstWaveInstantBurstCount = 6;
+    [SerializeField, Tooltip("For wave 1 only: clamp the FIRST spawn entry's spawnInterval to this value (seconds) if larger, so early waves don't feel slow. 0 or negative = no clamp.")] private float firstWaveIntervalClamp = 0.25f;
 
     // Returns effective right edge offset factoring early-wave override
     private float GetEffectiveRightEdgeOffset()

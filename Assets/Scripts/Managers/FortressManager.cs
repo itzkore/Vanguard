@@ -152,6 +152,16 @@ namespace BulletHeavenFortressDefense.Fortress
             EnsureWallsHUD();
         }
 
+        /// <summary>
+        /// Public entry point to force a full rebuild of the fortress layout at runtime.
+        /// Destroys existing children (walls, mounts, core) then re-invokes BuildFortress logic.
+        /// </summary>
+        public void RebuildFortress()
+        {
+            _built = false; // allow BuildFortress to proceed
+            BuildFortress();
+        }
+
         private void ClearExisting()
         {
             // Reset breach tracking

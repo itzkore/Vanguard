@@ -9,6 +9,7 @@ namespace BulletHeavenFortressDefense.Entities
     {
         [SerializeField] private float speed = 7f;
         [SerializeField] private float maxLifetime = 4f;
+    // Viewport culling removed (was causing premature explosions off-screen)
     [SerializeField, Tooltip("Runtime current radius (set from TowerData each shot). ")] private float radius = 1.5f;
     [SerializeField] private float falloffExponent = 1f;
         [SerializeField] private LayerMask hitMask = ~0;
@@ -54,6 +55,7 @@ namespace BulletHeavenFortressDefense.Entities
             {
                 Explode();
             }
+
         }
 
         private void OnTriggerEnter2D(Collider2D other)
@@ -109,5 +111,7 @@ namespace BulletHeavenFortressDefense.Entities
                 gameObject.SetActive(false);
             }
         }
+
+        // (Viewport culling helper removed)
     }
 }

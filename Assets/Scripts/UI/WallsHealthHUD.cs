@@ -105,12 +105,37 @@ namespace BulletHeavenFortressDefense.UI
         private void Update()
         {
             UpdateValues();
+            // Continuously ensure repair bar stays positioned relative to frame (frame can resize on scale changes)
+            if (_repairBarRoot != null && _frameRoot != null)
+            {
+                PositionRepairBar();
+            }
             // Optionally respond to runtime HUD scale recalculations
             if (_baselineCaptured && _lastAppliedScaleVersion != BulletHeavenFortressDefense.UI.HUDBootstrapper.PublishedScaleVersion)
             {
                 // Rebuild everything at new scale
                 ApplyScaleIfAvailable();
                 BuildGrid();
+            }
+            // Safety net: if repair UI somehow destroyed (scene reload order, etc), rebuild once
+            if ((_repairAllButton == null || _repairAllCostLabel == null || _repairAllLabel == null) && _frameRoot != null)
+            {
+                BuildRepairAllUI();
+            }
+            else if (_repairAllButton == null)
+            {
+                // If frame missing too, attempt full rebuild occasionally
+                _repairHealTimer += Time.unscaledDeltaTime;
+                if (_repairHealTimer >= 1.25f)
+                {
+                    _repairHealTimer = 0f;
+                    if (!_repairLoggedMissing)
+                    {
+                        Debug.LogWarning("[WallsHealthHUD] Repair bar missing (frame likely destroyed). Attempting full grid rebuild.");
+                        _repairLoggedMissing = true;
+                    }
+                    BuildGrid();
+                }
             }
             if (smoothFillLerp)
             {
@@ -508,7 +533,10 @@ namespace BulletHeavenFortressDefense.UI
                 rt.anchorMax = new Vector2(0, 1);
                 rt.pivot = new Vector2(0, 1);
             }
-            rt.sizeDelta = new Vector2(0f, 28f);
+            rt.sizeDelta = new Vector2(340f, 40f); // larger, more readable container
+
+            // Defensive: clear old references if any partially exist
+            _repairAllButton = null; _repairAllLabel = null; _repairAllCostLabel = null;
 
             // Button (pill style relies on default UISprite)
             var btnGO = new GameObject("RepairAllButton", typeof(Image), typeof(Button));
@@ -520,7 +548,7 @@ namespace BulletHeavenFortressDefense.UI
             btnRt.anchorMin = new Vector2(0f, 0f);
             btnRt.anchorMax = new Vector2(0f, 1f);
             btnRt.pivot = new Vector2(0f, 0.5f);
-            btnRt.sizeDelta = new Vector2(104f, 0f);
+            btnRt.sizeDelta = new Vector2(150f, 0f); // wider button
             btnRt.anchoredPosition = new Vector2(0f, 0f);
             _repairAllButton = btnGO.GetComponent<Button>();
             _repairAllButton.onClick.AddListener(RepairAllClicked);
@@ -532,7 +560,7 @@ namespace BulletHeavenFortressDefense.UI
             _repairAllLabel.text = "Repair"; // shorter
             _repairAllLabel.alignment = TextAnchor.MiddleCenter;
             _repairAllLabel.color = Color.white;
-            _repairAllLabel.fontSize = Mathf.RoundToInt(BulletHeavenFortressDefense.UI.HUDBootstrapper.PublishedFontBase * 0.36f); // ~13 at baseline 36
+            _repairAllLabel.fontSize = Mathf.RoundToInt(BulletHeavenFortressDefense.UI.HUDBootstrapper.PublishedFontBase * 0.52f); // even bigger for visibility
             var labelRt = labelGO.GetComponent<RectTransform>();
             labelRt.anchorMin = new Vector2(0, 0);
             labelRt.anchorMax = new Vector2(1, 1);
@@ -547,15 +575,19 @@ namespace BulletHeavenFortressDefense.UI
             _repairAllCostLabel.text = "€0";
             _repairAllCostLabel.alignment = TextAnchor.MiddleLeft;
             _repairAllCostLabel.color = Color.white;
-            _repairAllCostLabel.fontSize = Mathf.RoundToInt(BulletHeavenFortressDefense.UI.HUDBootstrapper.PublishedFontBase * 0.33f);
+            _repairAllCostLabel.fontSize = Mathf.RoundToInt(BulletHeavenFortressDefense.UI.HUDBootstrapper.PublishedFontBase * 0.48f);
             var costRt = costGO.GetComponent<RectTransform>();
             costRt.anchorMin = new Vector2(0f, 0f);
             costRt.anchorMax = new Vector2(0f, 1f);
             costRt.pivot = new Vector2(0f, 0.5f);
-            costRt.sizeDelta = new Vector2(150f, 0f);
-            costRt.anchoredPosition = new Vector2(112f, 0f);
+            costRt.sizeDelta = new Vector2(180f, 0f);
+            costRt.anchoredPosition = new Vector2(160f, 0f);
             PositionRepairBar();
         }
+
+        // --- Self-heal tracking for repair bar ---
+        private float _repairHealTimer = 0f;
+        private bool _repairLoggedMissing = false;
 
         private void PositionRepairBar()
         {

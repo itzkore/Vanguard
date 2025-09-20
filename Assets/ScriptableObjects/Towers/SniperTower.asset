@@ -16,7 +16,8 @@ MonoBehaviour:
   icon: {fileID: 0}
   prefab: {fileID: 4238061986199065120, guid: c182c636d83fdf04a88eb3ebf18ef618, type: 3}
   projectilePrefab: {fileID: 8269017022640902989, guid: f53b50014d7f5c047bd937d5c6ff1c89, type: 3}
-  projectilePoolId: projectiles_basic
+  projectilePoolId: projectiles_sniper
+  projectileSpeedBase: 0
   buildCost: 50
   damage: 50
   fireRate: 0.5

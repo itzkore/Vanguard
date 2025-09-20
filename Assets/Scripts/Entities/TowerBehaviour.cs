@@ -2,6 +2,7 @@
 using BulletHeavenFortressDefense.Data;
 using BulletHeavenFortressDefense.Managers;
 using BulletHeavenFortressDefense.Fortress;
+using BulletHeavenFortressDefense.Projectiles; // SniperProjectile reference
 
 namespace BulletHeavenFortressDefense.Entities
 {
@@ -11,12 +12,19 @@ namespace BulletHeavenFortressDefense.Entities
         [SerializeField] private float fireCooldown;
         [SerializeField, Tooltip("Current level (starts at 1). ")] private int level = 1;
         [SerializeField, Tooltip("Total energy invested in this tower (build + upgrades).")] private int investedEnergy;
+        [Header("Predictive Aim")]
+        [SerializeField, Tooltip("Enable leading of moving targets.")] private bool usePredictiveAim = true;
+        [SerializeField, Tooltip("Maximum seconds ahead to lead.")] private float maxLeadTime = 1.2f;
+        [SerializeField, Tooltip("Lead bias multiplier (1=exact; <1 under, >1 over). ")] private float leadBias = 1f;
 
         private TowerData _data;
         private float _cooldownTimer;
         private float _rangeSquared;
         private EnemyController _currentTarget;
         private FortressMount _mount;
+    // Cache of the last projectile speed actually used (after any runtime overrides),
+    // so predictive aiming can still function even if TowerData base speed is zero or modified by components.
+    private float _lastUsedProjectileSpeed = 0f;
 
         public FortressMount Mount => _mount;
         public int Level => level;
@@ -412,7 +420,7 @@ namespace BulletHeavenFortressDefense.Entities
                 return;
             }
 
-            Vector3 direction = (_currentTarget.Position - muzzle.position);
+            Vector3 direction = usePredictiveAim ? ComputeAimDirection(_currentTarget, muzzle.position) : (_currentTarget.Position - muzzle.position);
             if (direction.sqrMagnitude <= 0f)
             {
                 return;
@@ -466,7 +474,7 @@ namespace BulletHeavenFortressDefense.Entities
                 var enemy = targets[i];
                 if (enemy != null && enemy.IsAlive)
                 {
-                    Vector3 dir = (enemy.Position - muzzle.position);
+                    Vector3 dir = usePredictiveAim ? ComputeAimDirection(enemy, muzzle.position) : (enemy.Position - muzzle.position);
                     if (dir.sqrMagnitude > 0.0001f)
                     {
                         LaunchProjectile(dir);
@@ -524,10 +532,12 @@ namespace BulletHeavenFortressDefense.Entities
                 if (projectileObj.TryGetComponent(out ITowerProjectile projectile))
                 {
                     projectile.Initialize(_data, direction.normalized, _data.ProjectilePoolId);
+                    _lastUsedProjectileSpeed = projectile is Projectile p ? p.Speed : _data.ProjectileSpeedBase;
                 }
                 else if (projectileObj.TryGetComponent(out Projectile legacyProjectile))
                 {
                     legacyProjectile.Initialize(_data, direction.normalized, _data.ProjectilePoolId);
+                    _lastUsedProjectileSpeed = legacyProjectile.Speed;
                 }
 
                 // Apply runtime overrides AFTER base init.
@@ -538,6 +548,51 @@ namespace BulletHeavenFortressDefense.Entities
                     sniperProjComponent.SetRuntimeOverrides(finalDmg, pierce, _data.SniperCritChance, _data.SniperCritMultiplier);
                 }
             }
+        }
+
+        private Vector3 ComputeAimDirection(EnemyController target, Vector3 origin)
+        {
+            if (target == null) return (target?.Position ?? origin) - origin;
+            Vector3 targetPos = target.Position;
+            Vector3 targetVel = target.Velocity; // requires EnemyController velocity property
+            float projSpeed = _data != null && _data.ProjectileSpeedBase > 0f ? _data.ProjectileSpeedBase : (_lastUsedProjectileSpeed > 0f ? _lastUsedProjectileSpeed : 8f);
+            if (projSpeed <= 0.01f)
+            {
+                return targetPos - origin; // cannot compute lead
+            }
+
+            Vector3 relPos = targetPos - origin;
+            Vector3 relVel = targetVel; // shooter assumed stationary
+            float a = relVel.sqrMagnitude - projSpeed * projSpeed;
+            float b = 2f * Vector3.Dot(relPos, relVel);
+            float c = relPos.sqrMagnitude;
+
+            float t;
+            if (Mathf.Abs(a) < 0.0001f)
+            {
+                // Treat as linear (target velocity magnitude equals projectile speed roughly or target nearly stationary)
+                float projMag = projSpeed;
+                float dist = relPos.magnitude;
+                t = projMag > 0f ? dist / projMag : 0f;
+            }
+            else
+            {
+                float disc = b * b - 4f * a * c;
+                if (disc < 0f)
+                {
+                    return relPos; // no real solution
+                }
+                float sqrt = Mathf.Sqrt(disc);
+                float t1 = (-b + sqrt) / (2f * a);
+                float t2 = (-b - sqrt) / (2f * a);
+                t = (t1 > 0f && t2 > 0f) ? Mathf.Min(t1, t2) : (t1 > 0f ? t1 : t2);
+                if (t < 0f || float.IsNaN(t) || float.IsInfinity(t)) return relPos;
+            }
+
+            t *= Mathf.Clamp(leadBias, 0.05f, 4f);
+            t = Mathf.Clamp(t, 0f, Mathf.Max(0.01f, maxLeadTime));
+            Vector3 aimPoint = targetPos + targetVel * t;
+            return aimPoint - origin;
         }
     }
 }

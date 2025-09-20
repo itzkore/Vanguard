@@ -117,5 +117,8 @@ MonoBehaviour:
   speed: 50
   lifetime: 4
   hitRadius: 0.2
-  trailGlowWidthMult: 1.8
+  useContinuousSweep: 1
+  showDamageText: 1
+  debugPierce: 0
+  trailGlowWidthMult: 1
   debugLine: 0

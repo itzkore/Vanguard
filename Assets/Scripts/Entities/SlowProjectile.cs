@@ -9,6 +9,7 @@ namespace BulletHeavenFortressDefense.Entities
     {
         [SerializeField] private float speed = 6f;
         [SerializeField] private float maxLifetime = 5f;
+    // Viewport culling removed (was causing premature despawns missing targets)
     [SerializeField, Tooltip("Runtime slow factor (speed multiplier) injected from TowerData each shot.")] private float slowFactor = 0.5f;
     [SerializeField] private float slowDuration = 2f;
         [SerializeField] private float damageMultiplier = 0.5f;
@@ -41,6 +42,7 @@ namespace BulletHeavenFortressDefense.Entities
             {
                 Despawn();
             }
+
         }
 
         private void OnTriggerEnter2D(Collider2D other)
@@ -73,5 +75,7 @@ namespace BulletHeavenFortressDefense.Entities
                 gameObject.SetActive(false);
             }
         }
+
+        // (Viewport culling helper removed)
     }
 }

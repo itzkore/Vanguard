@@ -11,15 +11,15 @@ namespace BulletHeavenFortressDefense.UI
         [SerializeField] private RectTransform canvasRoot;
         [SerializeField] private Image fill;
         [Header("Dimensions")]
-    [SerializeField, Tooltip("World-space bar width in units.")] private float width = 0.28f; // reduced
-    [SerializeField, Tooltip("World-space bar height in units.")] private float height = 0.038f; // thinner
+    [SerializeField, Tooltip("World-space bar width in units.")] private float width = 0.42f; // enlarged for readability
+    [SerializeField, Tooltip("World-space bar height in units.")] private float height = 0.055f; // taller for clarity
     [SerializeField, Tooltip("Offset above enemy origin.")] private Vector2 worldOffset = new Vector2(0f, 0.34f); // closer
         [Header("Behavior")]
         [SerializeField] private bool smoothFill = true;
         [SerializeField, Range(1f, 30f)] private float fillLerpSpeed = 18f;
         [SerializeField] private bool hideWhenDead = true; // only hide if 0 HP
     [SerializeField] private int sortingOrder = 3;
-    [SerializeField, Tooltip("Hide bar until enemy first takes damage.")] private bool hideUntilDamaged = true;
+    [SerializeField, Tooltip("Hide bar until enemy first takes damage (requested behavior).")] private bool hideUntilDamaged = true; // revert to hide until damaged
     [SerializeField, Tooltip("Force bar to remain upright and not mirror when enemy flips.")] private bool lockUpright = true;
         [Header("Colors")]
         [SerializeField] private Color colorFull = new Color(0.15f, 1f, 0.35f, 1f);
@@ -54,9 +54,10 @@ namespace BulletHeavenFortressDefense.UI
                 }
                 fill.color = colorFull;
             }
-            if (hideUntilDamaged && canvasRoot != null)
+            if (canvasRoot != null)
             {
-                canvasRoot.gameObject.SetActive(false);
+                // If configured to hide until damaged, start hidden; otherwise ensure visible immediately.
+                canvasRoot.gameObject.SetActive(!hideUntilDamaged);
             }
         }
 
@@ -64,9 +65,9 @@ namespace BulletHeavenFortressDefense.UI
         {
             _enemy = GetComponentInParent<EnemyController>();
             EnsureCanvas();
-            if (hideUntilDamaged && canvasRoot != null)
+            if (canvasRoot != null)
             {
-                canvasRoot.gameObject.SetActive(false); // start hidden until damage
+                canvasRoot.gameObject.SetActive(!hideUntilDamaged);
             }
         }
 
@@ -130,7 +131,11 @@ namespace BulletHeavenFortressDefense.UI
                 bool active = true;
                 if (hideWhenDead && pct <= 0f) active = false;
                 if (hideUntilDamaged && !_hasTakenDamage) active = false;
-                canvasRoot.gameObject.SetActive(active);
+                // Only update if changed to avoid unnecessary SetActive calls every health tick.
+                if (canvasRoot.gameObject.activeSelf != active)
+                {
+                    canvasRoot.gameObject.SetActive(active);
+                }
             }
         }
 

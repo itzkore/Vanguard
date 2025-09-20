@@ -24,6 +24,7 @@ namespace BulletHeavenFortressDefense.UI
         private float _originalTimeScale = 1f;
         private float _enemyBase;
         private Button _button;
+        private bool _subscribed;
 
         private void Awake()
         {
@@ -37,6 +38,47 @@ namespace BulletHeavenFortressDefense.UI
             _enemyBase = baseEnemyPace > 0f ? baseEnemyPace : EnemyPace.SpeedMultiplier;
             _index = Mathf.Clamp(startIndex, 0, speedSteps.Length - 1);
             ApplyCurrent();
+            TrySubscribeWaveEvents();
+        }
+
+        private void OnEnable()
+        {
+            TrySubscribeWaveEvents();
+            // Reapply in case timescale was reset externally during disable
+            ApplyCurrent();
+        }
+
+        private void OnDisable()
+        {
+            if (_subscribed && BulletHeavenFortressDefense.Managers.WaveManager.HasInstance)
+            {
+                var wm = BulletHeavenFortressDefense.Managers.WaveManager.Instance;
+                wm.WaveStarted -= OnWaveStarted;
+                wm.PhaseChanged -= OnPhaseChanged;
+            }
+            _subscribed = false;
+        }
+
+        private void TrySubscribeWaveEvents()
+        {
+            if (_subscribed) return;
+            if (!BulletHeavenFortressDefense.Managers.WaveManager.HasInstance) return;
+            var wm = BulletHeavenFortressDefense.Managers.WaveManager.Instance;
+            wm.WaveStarted += OnWaveStarted;
+            wm.PhaseChanged += OnPhaseChanged;
+            _subscribed = true;
+        }
+
+        private void OnWaveStarted(int wave)
+        {
+            // Reapply current factor to ensure Time.timeScale not reset to base
+            ApplyCurrent();
+        }
+
+        private void OnPhaseChanged(BulletHeavenFortressDefense.Managers.WaveManager.WavePhase phase)
+        {
+            // Some transitions may restore base speed; enforce chosen multiplier
+            ApplyCurrent();
         }
 
         private void CycleSpeed()
@@ -49,6 +91,8 @@ namespace BulletHeavenFortressDefense.UI
         private void ApplyCurrent()
         {
             float factor = speedSteps != null && speedSteps.Length > 0 ? speedSteps[_index] : 1f;
+            // Base game speed might have been altered externally; treat _originalTimeScale as baseline 1 after first use
+            if (_originalTimeScale <= 0f) _originalTimeScale = 1f;
             Time.timeScale = _originalTimeScale * factor;
             if (affectEnemyPace)
             {

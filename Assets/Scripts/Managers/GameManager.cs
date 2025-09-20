@@ -85,6 +85,13 @@ namespace BulletHeavenFortressDefense.Managers
             {
                 ApplyBaseGameSpeed();
             }
+            // If we're starting a new run after a previous one ended, ensure the entire playfield is reset.
+            // Conditions: coming from GameOver or Completed (player finished or died) OR we have ever reached a combat state before.
+            if (_hasRunBefore)
+            {
+                FullResetPlayfield();
+            }
+
             BaseCore.Instance?.RestoreFullHealth();
             EconomySystem.Instance?.ResetEnergy();
 
@@ -99,6 +106,8 @@ namespace BulletHeavenFortressDefense.Managers
             {
                 WaveManager.Instance.StartSequence();
             }
+
+            _hasRunBefore = true;
         }
 
         public void EndRun()
@@ -113,6 +122,90 @@ namespace BulletHeavenFortressDefense.Managers
             // Freeze the game world while showing Game Over UI. NOTE: StartRun now force-restores from 0.
             Time.timeScale = 0f;
         }
+
+        #region Full Reset Implementation
+        private bool _hasRunBefore = false;
+
+        /// <summary>
+        /// Performs a comprehensive cleanup of runtime-spawned gameplay objects so a fresh run starts from a clean slate.
+        /// Destroys remaining enemies, projectiles, towers, and rebuilds the fortress layout.
+        /// </summary>
+        private void FullResetPlayfield()
+        {
+            try
+            {
+                // 1. Stop any wave spawning logic first to prevent repopulation while clearing.
+                if (WaveManager.HasInstance)
+                {
+                    WaveManager.Instance.StopSequence();
+                }
+
+                // 2. Clear enemies (copy static list to avoid modification while iterating).
+                var enemyList = BulletHeavenFortressDefense.Entities.EnemyController.ActiveEnemies;
+                if (enemyList != null && enemyList.Count > 0)
+                {
+                    // Copy to avoid enumerator issues
+                    var toClear = new System.Collections.Generic.List<BulletHeavenFortressDefense.Entities.EnemyController>(enemyList);
+                    for (int i = 0; i < toClear.Count; i++)
+                    {
+                        var e = toClear[i];
+                        if (e == null) continue;
+                        var go = e.gameObject;
+                        if (go != null) UnityEngine.Object.Destroy(go);
+                    }
+                }
+
+                // 3. Clear projectiles (all ITowerProjectile implementors)
+                var monos = UnityEngine.Object.FindObjectsOfType<MonoBehaviour>(true);
+                for (int i = 0; i < monos.Length; i++)
+                {
+                    var mb = monos[i];
+                    if (mb == null) continue;
+                    if (mb is BulletHeavenFortressDefense.Entities.ITowerProjectile)
+                    {
+                        UnityEngine.Object.Destroy(mb.gameObject);
+                    }
+                }
+
+                // 4. Remove placed towers (destroy all TowerBehaviour instances)
+                var towers = UnityEngine.Object.FindObjectsOfType<BulletHeavenFortressDefense.Entities.TowerBehaviour>(true);
+                for (int i = 0; i < towers.Length; i++)
+                {
+                    var t = towers[i]; if (t == null) continue;
+                    UnityEngine.Object.Destroy(t.gameObject);
+                }
+
+                // 5. Rebuild fortress (walls, mounts, core) so mounts are empty.
+                if (Fortress.FortressManager.HasInstance)
+                {
+                    Fortress.FortressManager.Instance.RebuildFortress();
+                }
+
+                // 6. Clear targeting focus bookkeeping if coordinator exists (prevents stale enemy refs).
+                var focus = UnityEngine.Object.FindObjectOfType<BulletHeavenFortressDefense.AI.TargetFocusCoordinator>();
+                if (focus != null)
+                {
+                    // Easiest: destroy & let scene recreate / or keep (if persistent) and rely on internal cleanup.
+                    // We prefer a soft clean: reflection search for dictionary field and clear it.
+                    var fld = typeof(BulletHeavenFortressDefense.AI.TargetFocusCoordinator).GetField("_focusCounts", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                    if (fld != null)
+                    {
+                        if (fld.GetValue(focus) is System.Collections.IDictionary dict)
+                        {
+                            dict.Clear();
+                        }
+                    }
+                }
+
+                // 7. Reset economy & core already handled in StartRun after this call; ensure base core health full if instance present.
+                BaseCore.Instance?.RestoreFullHealth();
+            }
+            catch (System.Exception ex)
+            {
+                Debug.LogError("[GameManager] Exception during FullResetPlayfield: " + ex);
+            }
+        }
+        #endregion
 
         public void ReturnToMenu()
         {

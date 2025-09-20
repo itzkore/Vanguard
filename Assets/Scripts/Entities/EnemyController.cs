@@ -4,12 +4,16 @@ using UnityEngine;
 using BulletHeavenFortressDefense.Data;
 using BulletHeavenFortressDefense.Managers;
 using BulletHeavenFortressDefense.Fortress;
+using BulletHeavenFortressDefense.Projectiles; // EnemyProjectile
 
 namespace BulletHeavenFortressDefense.Entities
 {
     [RequireComponent(typeof(Collider2D))]
     public class EnemyController : MonoBehaviour, IDamageable
     {
+        // --- Blood FX Settings ---
+        // Allow disabling fallback particle generation if visual artifacts (red squares) are undesired.
+        public static bool EnableFallbackBloodFx = true;
         private static readonly List<EnemyController> _activeEnemies = new();
         public static event Action<EnemyController> EnemyDefeated;
         public event Action<float, float> HealthChanged;
@@ -64,6 +68,7 @@ namespace BulletHeavenFortressDefense.Entities
         public static IReadOnlyList<EnemyController> ActiveEnemies => _activeEnemies;
         public bool IsAlive => _currentHealth > 0f;
         public Vector3 Position => transform.position;
+    public Vector3 Velocity { get; private set; }
         public float RemainingHealth => _currentHealth;
         public float MaxHealth => _maxHealthOverride > 0f ? _maxHealthOverride : (_data != null ? _data.Health : Mathf.Max(1f, _currentHealth));
         public float DistanceToBaseSquared => BaseCore.Instance != null
@@ -154,7 +159,11 @@ namespace BulletHeavenFortressDefense.Entities
                 hb.ResetForSpawn();
             }
             NotifyHealthChanged();
+            _lastPos = transform.position;
+            Velocity = Vector3.zero;
         }
+
+        private Vector3 _lastPos;
 
         // Called by WaveManager right after spawning to enforce HP = RapidBaseHitFactor * rapidLevel1Damage * waveMultiplier
         public void ApplyBalanceOverrides(float rapidLevel1Damage, int waveNumber)
@@ -276,6 +285,13 @@ namespace BulletHeavenFortressDefense.Entities
             {
                 TryShootAtTarget();
             }
+
+            // Update velocity after movement and potential teleports this frame
+            Vector3 currentPos = transform.position;
+            float dt = Time.deltaTime;
+            if (dt <= 0f) dt = 0.0001f;
+            Velocity = (currentPos - _lastPos) / dt;
+            _lastPos = currentPos;
         }
 
         private void TryShootAtTarget()
@@ -849,6 +865,7 @@ namespace BulletHeavenFortressDefense.Entities
 
         private static void EnsureFallbackBloodPrefabs()
         {
+            if (!EnableFallbackBloodFx) return; // skip building any fallback FX
             if (_fallbackHitFxPrefab != null && _fallbackDeathFxPrefab != null) return;
 
             // Shared material (Sprites/Default)

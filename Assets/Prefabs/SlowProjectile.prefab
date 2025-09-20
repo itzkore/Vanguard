@@ -11,8 +11,7 @@ GameObject:
   - component: {fileID: 6631396788781459627}
   - component: {fileID: 6835707032703786745}
   - component: {fileID: 2860898872359397744}
-  - component: {fileID: 6187802822697579702}
-  - component: {fileID: 3770653611468508827}
+  - component: {fileID: 6495202716640377301}
   m_Layer: 0
   m_Name: SlowProjectile
   m_TagString: Untagged
@@ -103,7 +102,7 @@ CircleCollider2D:
   m_Offset: {x: 0, y: 0}
   serializedVersion: 2
   m_Radius: 0.08
---- !u!114 &6187802822697579702
+--- !u!114 &6495202716640377301
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -112,27 +111,11 @@ MonoBehaviour:
   m_GameObject: {fileID: 8269017022640902989}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 978a5ed811a049b7bf2e3b428aea53ae, type: 3}
+  m_Script: {fileID: 11500000, guid: c41144dfa4c429148b15b82b872fc8d8, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  speed: 8
+  speed: 6
   maxLifetime: 5
   slowFactor: 0.5
   slowDuration: 2
   damageMultiplier: 0.5
---- !u!114 &3770653611468508827
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 8269017022640902989}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: c1c63c3673c863c46a1d5408b204a91c, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  damageTextPrefab: {fileID: 0}
-  poolSize: 64
-  yOffset: 0.4
-  textParent: {fileID: 0}

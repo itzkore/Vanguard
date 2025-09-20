@@ -46,6 +46,8 @@ namespace BulletHeavenFortressDefense.UI
         private void Awake()
         {
             if (_instance == null) _instance = this;
+            AutoBindTexts();
+            EnsureWaveLabelExists();
         }
 
         private void OnEnable()
@@ -80,6 +82,23 @@ namespace BulletHeavenFortressDefense.UI
 
                 OnPhaseTimerUpdated(WaveManager.Instance.CurrentPhase, WaveManager.Instance.CurrentPhaseTimeRemaining);
                 UpdateKills();
+                // Safety net: schedule a late refresh in case wave started before HUD enabled
+                StartCoroutine(LateWaveRefresh());
+            }
+        }
+
+        private System.Collections.IEnumerator LateWaveRefresh()
+        {
+            // Wait a short moment to allow WaveManager to initialize if spawning concurrently
+            yield return null; // one frame
+            yield return new WaitForSecondsRealtime(0.25f);
+            if (WaveManager.HasInstance && waveText != null)
+            {
+                int w = WaveManager.Instance.CurrentWaveNumber;
+                if (w >= 0)
+                {
+                    waveText.text = FormatWaveText(w);
+                }
             }
         }
 
@@ -119,7 +138,92 @@ namespace BulletHeavenFortressDefense.UI
                     _coreSubscriptionVerified = true;
                 }
             }
+
+            // Wave label self-heal: if somehow destroyed at runtime, recreate (check infrequently for cost)
+            _waveLabelHealTimer += Time.unscaledDeltaTime;
+            if (_waveLabelHealTimer >= 1.0f)
+            {
+                _waveLabelHealTimer = 0f;
+                if (waveText == null)
+                {
+                    if (!_waveLabelLoggedMissing)
+                    {
+                        Debug.LogWarning("[HUDController] Wave label missing at runtime. Recreating.");
+                        _waveLabelLoggedMissing = true; // only log first time to avoid spam
+                    }
+                    EnsureWaveLabelExists();
+                    // Immediately refresh with current wave if available
+                    if (WaveManager.HasInstance && waveText != null)
+                    {
+                        int w = WaveManager.Instance.CurrentWaveNumber;
+                        waveText.text = w >= 0 ? FormatWaveText(w) : "Wave --";
+                    }
+                }
+            }
         }
+
+        private void AutoBindTexts()
+        {
+            // Attempt to locate Text components by common names if not wired in inspector
+            if (waveText == null)
+            {
+                waveText = FindTextByNames("WaveText", "WaveLabel", "Wave");
+            }
+        }
+
+        private Text FindTextByNames(params string[] names)
+        {
+            for (int i = 0; i < names.Length; i++)
+            {
+                string n = names[i];
+                var t = GetComponentInChildren<Text>(includeInactive: true);
+                // Above only returns first; to refine we'd scan all children
+                var all = GetComponentsInChildren<Text>(true);
+                for (int j = 0; j < all.Length; j++)
+                {
+                    if (all[j] != null && all[j].name.Equals(n, System.StringComparison.OrdinalIgnoreCase))
+                    {
+                        return all[j];
+                    }
+                }
+            }
+            return null;
+        }
+
+        private void EnsureWaveLabelExists()
+        {
+            if (waveText != null) return;
+            // Create a simple label at top center of this canvas
+            var canvas = GetComponentInParent<Canvas>();
+            Transform parent = canvas != null ? canvas.transform : this.transform;
+            var go = new GameObject("WaveText", typeof(RectTransform));
+            go.transform.SetParent(parent, false);
+            var rt = go.GetComponent<RectTransform>();
+            rt.anchorMin = new Vector2(0.5f, 1f);
+            rt.anchorMax = new Vector2(0.5f, 1f);
+            rt.pivot = new Vector2(0.5f, 1f);
+            rt.anchoredPosition = new Vector2(0f, -8f);
+            rt.sizeDelta = new Vector2(200f, 40f);
+            waveText = go.AddComponent<Text>();
+            waveText.alignment = TextAnchor.MiddleCenter;
+            waveText.font = UIFontProvider.Get();
+            // Use larger font (0.65x) for visibility
+            waveText.fontSize = Mathf.RoundToInt(HUDBootstrapper.PublishedFontBase * 0.65f);
+            waveText.color = Color.white;
+            waveText.text = "Wave --";
+            // Add outline + subtle shadow for contrast
+            var outline = go.AddComponent<Outline>();
+            outline.effectColor = new Color(0f,0f,0f,0.9f);
+            outline.effectDistance = new Vector2(1.5f, -1.5f);
+            var shadow = go.AddComponent<Shadow>();
+            shadow.effectColor = new Color(0f,0f,0f,0.5f);
+            shadow.effectDistance = new Vector2(2f, -2f);
+            _waveLabelLoggedMissing = false; // reset in case it was recreated
+        }
+
+        // --- Self-heal tracking fields ---
+        private float _waveLabelHealTimer = 0f;
+        private bool _waveLabelLoggedMissing = false;
 
         public static void Toast(string message, float duration = 2.5f)
         {
@@ -328,7 +432,7 @@ namespace BulletHeavenFortressDefense.UI
         {
             if (waveText != null)
             {
-                waveText.text = $"Wave {waveNumber}";
+                waveText.text = FormatWaveText(waveNumber);
             }
         }
 
@@ -336,7 +440,8 @@ namespace BulletHeavenFortressDefense.UI
         {
             if (phaseText != null)
             {
-                phaseText.text = $"Phase: {phase.ToString().ToUpperInvariant()}";
+                string wavePart = WaveManager.HasInstance ? FormatWaveText(WaveManager.Instance.CurrentWaveNumber) + "  " : string.Empty;
+                phaseText.text = wavePart + $"Phase: {phase.ToString().ToUpperInvariant()}";
             }
 
             if (phaseTimerText != null)
@@ -361,6 +466,17 @@ namespace BulletHeavenFortressDefense.UI
                 }
             }
 
+            // Keep wave info fresh on timer ticks too (covers progression increments without phase change)
+            if (phaseText != null && WaveManager.HasInstance)
+            {
+                string wavePart = FormatWaveText(WaveManager.Instance.CurrentWaveNumber) + "  ";
+                string phaseLabel = phase.ToString().ToUpperInvariant();
+                if (!phaseText.text.StartsWith(wavePart))
+                {
+                    phaseText.text = wavePart + $"Phase: {phaseLabel}";
+                }
+            }
+
             UpdateEnemiesRemaining();
         }
 
@@ -379,6 +495,31 @@ namespace BulletHeavenFortressDefense.UI
             {
                 killsText.text = $"Kills: {WaveManager.Instance.TotalKills}";
             }
+        }
+
+        private string FormatWaveText(int current)
+        {
+            int total = -1;
+            if (WaveManager.HasInstance)
+            {
+                // If multiple authored/generated waves exist, show total; else omit (infinite / virtual looping)
+                var wm = WaveManager.Instance;
+                var seqField = typeof(WaveManager).GetField("waveSequence", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                var seq = seqField != null ? seqField.GetValue(wm) : null;
+                if (seq != null)
+                {
+                    var wavesProp = seq.GetType().GetProperty("Waves");
+                    if (wavesProp != null)
+                    {
+                        var list = wavesProp.GetValue(seq) as System.Collections.IList;
+                        if (list != null && list.Count > 1)
+                        {
+                            total = list.Count;
+                        }
+                    }
+                }
+            }
+            return total > 0 ? $"Wave {current}/{total}" : $"Wave {current}";
         }
 
         private string FormatTimer(float seconds)
