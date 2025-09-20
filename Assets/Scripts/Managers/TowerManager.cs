@@ -9,8 +9,11 @@ using UnityEditor;
 
 namespace BulletHeavenFortressDefense.Managers
 {
-    public class TowerManager : Singleton<TowerManager>
+    public class TowerManager : Singleton<TowerManager>, BulletHeavenFortressDefense.Utilities.IRunResettable
     {
+        [Header("Instance Safety")]
+        [SerializeField, Tooltip("If true, any duplicate TowerManager instances found at runtime will be destroyed (keeping the first).")]
+        private bool autoDestroyDuplicateInstances = true;
         [SerializeField] private List<TowerData> unlockedTowers = new List<TowerData>();
         [SerializeField, Tooltip("Optional extra towers appended at runtime (use if you don't want to move assets into Resources)." )]
         private List<TowerData> additionalTowers = new List<TowerData>();
@@ -46,6 +49,8 @@ namespace BulletHeavenFortressDefense.Managers
             // Important: ensure Singleton<T> sets the static instance
             base.Awake();
 
+            DetectDuplicateInstances();
+
             // Ensure there is at least one tower to select during development
             SeedDefaultsIfEmpty();
             // Always attempt to discover any newly added TowerData assets (e.g., sniper) that were not present earlier
@@ -68,6 +73,48 @@ namespace BulletHeavenFortressDefense.Managers
             // Start late discovery routine in runtime builds to catch assets that become available slightly later (e.g., addressable warmup)
             StartLateDiscoveryRoutine();
 #endif
+        }
+
+        private void OnEnable()
+        {
+            BulletHeavenFortressDefense.Utilities.RunResetRegistry.Register(this);
+        }
+
+        private void OnDisable()
+        {
+            BulletHeavenFortressDefense.Utilities.RunResetRegistry.Unregister(this);
+        }
+
+        public void ResetForNewRun()
+        {
+            // Do not wipe unlockedTowers (progress). Just clear active towers list snapshot (GameManager already destroyed objects).
+            _activeTowers.Clear();
+        }
+
+        private void DetectDuplicateInstances()
+        {
+            var all = FindObjectsOfType<TowerManager>(true);
+            if (all.Length > 1)
+            {
+                string list = string.Empty;
+                foreach (var tm in all)
+                {
+                    list += "\n - " + tm.gameObject.name + " (activeInHierarchy=" + tm.gameObject.activeInHierarchy + ", scene=" + tm.gameObject.scene.name + ")";
+                }
+                Debug.LogWarning($"[TowerManager] Detected {all.Length} instances!{list}");
+                if (autoDestroyDuplicateInstances)
+                {
+                    for (int i = 0; i < all.Length; i++)
+                    {
+                        var inst = all[i];
+                        if (inst != this)
+                        {
+                            Debug.LogWarning("[TowerManager] Destroying duplicate instance: " + inst.gameObject.name, inst);
+                            Destroy(inst.gameObject);
+                        }
+                    }
+                }
+            }
         }
 
     // Editor-only population utility must be excluded from player builds (calls AssetDatabase)

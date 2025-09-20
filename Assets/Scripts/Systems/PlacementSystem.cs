@@ -3,10 +3,11 @@ using BulletHeavenFortressDefense.Managers;
 using BulletHeavenFortressDefense.Data;
 using BulletHeavenFortressDefense.Utilities;
 using BulletHeavenFortressDefense.Fortress;
+using BulletHeavenFortressDefense.UI; // Added for HUDController toast access
 
 namespace BulletHeavenFortressDefense.Systems
 {
-    public class PlacementSystem : Singleton<PlacementSystem>
+    public class PlacementSystem : Singleton<PlacementSystem>, BulletHeavenFortressDefense.Utilities.IRunResettable
     {
         [SerializeField] private LayerMask placementMask;
         [SerializeField] private GameEvent onPlacementSucceeded;
@@ -29,9 +30,26 @@ namespace BulletHeavenFortressDefense.Systems
                     if (mount == null) continue;
                     var visual = mount.GetComponent<Fortress.MountSpotVisual>();
                     if (visual == null) visual = mount.gameObject.AddComponent<Fortress.MountSpotVisual>();
-                    visual.SetVisible(true, mount.CanPlaceTower());
+                    bool canPlace = mount.CanPlaceTower();
+                    visual.SetVisible(true, canPlace);
                 }
             }
+        }
+
+        private void OnEnable()
+        {
+            BulletHeavenFortressDefense.Utilities.RunResetRegistry.Register(this);
+        }
+
+        private void OnDisable()
+        {
+            BulletHeavenFortressDefense.Utilities.RunResetRegistry.Unregister(this);
+        }
+
+        public void ResetForNewRun()
+        {
+            _pendingTower = null;
+            HideAllSpots();
         }
 
         public void HandlePrimaryContact(Vector3 worldPosition)
@@ -65,10 +83,23 @@ namespace BulletHeavenFortressDefense.Systems
                 return false;
             }
 
-            if (mount == null || !mount.CanPlaceTower())
+            if (mount == null)
             {
                 onPlacementFailed?.Raise();
                 // Keep spots visible; user can try another
+                return true;
+            }
+
+            // Explicit guard: occupied mount should never allow placement; refresh its visual to blocked.
+            if (!mount.CanPlaceTower())
+            {
+                HUDController.Toast("Spot occupied", 1.2f);
+                var visualBlocked = mount.GetComponent<Fortress.MountSpotVisual>();
+                if (visualBlocked != null)
+                {
+                    visualBlocked.SetVisible(true, false);
+                }
+                onPlacementFailed?.Raise();
                 return true;
             }
 
@@ -95,6 +126,7 @@ namespace BulletHeavenFortressDefense.Systems
                 EconomySystem.Instance.Add(scaledCost);
                 onPlacementFailed?.Raise();
                 // Keep spots visible for another attempt
+                RefreshSpotVisuals();
             }
 
             return true;
@@ -113,6 +145,18 @@ namespace BulletHeavenFortressDefense.Systems
                 if (mount == null) continue;
                 var visual = mount.GetComponent<Fortress.MountSpotVisual>();
                 if (visual != null) visual.SetVisible(false, false);
+            }
+        }
+
+        private void RefreshSpotVisuals()
+        {
+            if (!FortressManager.HasInstance) return;
+            foreach (var mount in FortressManager.Instance.Mounts)
+            {
+                if (mount == null) continue;
+                var visual = mount.GetComponent<Fortress.MountSpotVisual>();
+                if (visual == null) continue;
+                visual.SetVisible(true, mount.CanPlaceTower());
             }
         }
     }

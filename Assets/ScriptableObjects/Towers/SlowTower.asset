@@ -32,7 +32,7 @@ MonoBehaviour:
   sellRefundPercent: 0.6
   fireRatePerLevelMult: 1.15
   rangePerLevelMult: 1.1
-  damagePerLevelMult: 1
+  damagePerLevelMult: 1.1
   damageFlatPerLevel: 0
   isSplash: 1
   splashRadiusBase: 0.7
@@ -54,3 +54,4 @@ MonoBehaviour:
   sniperCritMultiplier: 2.5
   sniperRangeMultiplier: 2.5
   sniperProjectileSpeed: 0
+  visualProfile: {fileID: 11400000, guid: 6ae7abe3c25eee0469fe3ac5b4168eb3, type: 2}

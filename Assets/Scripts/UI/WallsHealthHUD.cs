@@ -176,17 +176,33 @@ namespace BulletHeavenFortressDefense.UI
 
         private void ApplyVisibility(GameManager.GameState state)
         {
-            bool show = state == GameManager.GameState.ShopPhase ||
-                        state == GameManager.GameState.PreparationPhase ||
-                        state == GameManager.GameState.CombatPhase ||
-                        state == GameManager.GameState.Completed;
+            // Rules revision:
+            // We want the HUD visible for all in-run phases (Shop, Preparation, Combat) AND persist during transitions
+            // where GameManager might briefly enter Completed/GameOver AFTER enemies finish but before user returns.
+            // Hide only in MainMenu and Boot.
+            bool show = state != GameManager.GameState.MainMenu && state != GameManager.GameState.Boot;
+            // If GameOver or Completed: keep showing so player can still see wall aftermath until returning to menu.
             if (root != null)
             {
-                root.gameObject.SetActive(show);
+                if (!root.gameObject.activeSelf && show)
+                {
+                    root.gameObject.SetActive(true);
+                }
+                else if (root.gameObject.activeSelf && !show)
+                {
+                    root.gameObject.SetActive(false);
+                }
             }
             else
             {
-                gameObject.SetActive(show);
+                if (!gameObject.activeSelf && show) gameObject.SetActive(true);
+                else if (gameObject.activeSelf && !show) gameObject.SetActive(false);
+            }
+
+            // Defensive: if we are supposed to show but the frame was somehow destroyed, rebuild immediately.
+            if (show && (_frameRoot == null || _fills.Count == 0))
+            {
+                BuildGrid();
             }
         }
 

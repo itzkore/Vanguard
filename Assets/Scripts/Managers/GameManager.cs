@@ -76,6 +76,8 @@ namespace BulletHeavenFortressDefense.Managers
 
         public void StartRun()
         {
+            if (_startingRun) { Debug.LogWarning("[GameManager] StartRun ignored (already starting)." ); return; }
+            _startingRun = true;
             // Force-restore time scale even if it was set to 0f by GameOver (ApplyBaseGameSpeed previously early-exited on 0)
             if (Mathf.Approximately(Time.timeScale, 0f))
             {
@@ -91,6 +93,8 @@ namespace BulletHeavenFortressDefense.Managers
             {
                 FullResetPlayfield();
             }
+            // Invoke registered resets instead of scanning scene (faster, deterministic)
+            BulletHeavenFortressDefense.Utilities.RunResetRegistry.ResetAll();
 
             BaseCore.Instance?.RestoreFullHealth();
             EconomySystem.Instance?.ResetEnergy();
@@ -108,6 +112,7 @@ namespace BulletHeavenFortressDefense.Managers
             }
 
             _hasRunBefore = true;
+            _startingRun = false;
         }
 
         public void EndRun()
@@ -117,6 +122,8 @@ namespace BulletHeavenFortressDefense.Managers
 
             if (WaveManager.HasInstance)
             {
+                // Capture statistics BEFORE resetting the sequence so GameOver UI can display them
+                WaveManager.Instance.CaptureRunEnd();
                 WaveManager.Instance.StopSequence();
             }
             // Freeze the game world while showing Game Over UI. NOTE: StartRun now force-restores from 0.
@@ -125,6 +132,7 @@ namespace BulletHeavenFortressDefense.Managers
 
         #region Full Reset Implementation
         private bool _hasRunBefore = false;
+    private bool _startingRun = false; // guards against rapid double StartRun calls
 
         /// <summary>
         /// Performs a comprehensive cleanup of runtime-spawned gameplay objects so a fresh run starts from a clean slate.

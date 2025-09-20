@@ -11,7 +11,8 @@ namespace BulletHeavenFortressDefense.Managers
         [SerializeField] private Camera targetCamera;
         [Header("Zoom Range")]
     [SerializeField, Min(0.01f)] private float minOrthoSize = 2.5f;
-    [SerializeField, Min(0.01f)] private float maxOrthoSize = 8f; // will be clamped to default at runtime
+    [SerializeField, Min(0.01f), Tooltip("Maximum orthographic size (zoomed out). Can exceed default start size to view larger battle area.")] private float maxOrthoSize = 18f;
+    [SerializeField, Tooltip("If true, when scene starts the default camera size becomes the midpoint between min & max if current size is outside.")] private bool autoNormalizeAtStart = true;
     [Header("World Bounds (Optional)")]
     [SerializeField, Tooltip("If set, camera panning/zoom re-centering will be clamped so that the view never leaves these world bounds. Values represent the full rectangle (minX, maxX, minY, maxY). Leave max <= min to auto-use baseline extents.")] private float boundsMinX = 0f;
     [SerializeField] private float boundsMaxX = -1f;
@@ -43,6 +44,9 @@ namespace BulletHeavenFortressDefense.Managers
         // Accumulated pan offset at max zoom-in level (scaled down as we zoom out so we always recenter at default size)
         private Vector3 _panOffset;
 
+        public float DefaultSize => _defaultSize;
+        public float MaxOrthoSize => maxOrthoSize;
+
         private void Awake()
         {
             if (targetCamera == null)
@@ -56,9 +60,18 @@ namespace BulletHeavenFortressDefense.Managers
                     targetCamera.orthographic = true;
                 }
                 _defaultSize = Mathf.Max(0.01f, targetCamera.orthographicSize);
-                // Cap max to default so users can only zoom in and back to default (no further out)
-                maxOrthoSize = Mathf.Min(Mathf.Max(minOrthoSize, maxOrthoSize), _defaultSize);
-                _targetSize = Mathf.Clamp(targetCamera.orthographicSize, minOrthoSize, _defaultSize);
+                // Allow zooming further out than initial default; ensure ordering
+                maxOrthoSize = Mathf.Max(minOrthoSize + 0.01f, maxOrthoSize);
+                if (autoNormalizeAtStart)
+                {
+                    // If starting size is outside range, pull it toward midpoint for a balanced initial view
+                    float mid = (minOrthoSize + maxOrthoSize) * 0.5f;
+                    if (targetCamera.orthographicSize < minOrthoSize || targetCamera.orthographicSize > maxOrthoSize)
+                    {
+                        targetCamera.orthographicSize = Mathf.Clamp(mid, minOrthoSize, maxOrthoSize);
+                    }
+                }
+                _targetSize = Mathf.Clamp(targetCamera.orthographicSize, minOrthoSize, maxOrthoSize);
                 targetCamera.orthographicSize = _targetSize;
                 _targetPos = targetCamera.transform.position;
                 _baselineCenter = _targetPos;
@@ -149,17 +162,16 @@ namespace BulletHeavenFortressDefense.Managers
                 }
             }
 
-            // At runtime, ensure the max never exceeds the default size
-            float maxAllowed = (_defaultSize > 0f) ? _defaultSize : maxOrthoSize;
-            size = Mathf.Clamp(size, minOrthoSize, maxAllowed);
+            // Clamp to configured min/max (now supports extended zoom out) 
+            size = Mathf.Clamp(size, minOrthoSize, maxOrthoSize);
             _targetSize = size;
 
             // Smooth toward target size
             float k = 1f - Mathf.Exp(-Mathf.Max(0f, smoothing) * Time.unscaledDeltaTime);
             targetCamera.orthographicSize = Mathf.Lerp(targetCamera.orthographicSize, _targetSize, k);
 
-            // Zoom factor: 0 = fully zoomed out (default), 1 = minOrthoSize (max zoom in)
-            float zoomFactor = Mathf.InverseLerp(_defaultSize, minOrthoSize, _targetSize);
+            // Zoom factor relative to current min->max range (0 = max zoom out, 1 = max zoom in)
+            float zoomFactor = Mathf.InverseLerp(maxOrthoSize, minOrthoSize, _targetSize);
 
             // Handle panning only while zoomed in (some margin to avoid tiny jitter near default)
             if (enablePanning && _targetSize < _defaultSize - 0.0001f)
@@ -171,16 +183,19 @@ namespace BulletHeavenFortressDefense.Managers
                 _dragging = false;
             }
 
+            // Calculate rightward center shift to maintain left boundary rule
+            Vector3 adjustedCenter = CalculateZoomAdjustedCenter(_targetSize);
+
             // Recompute target position from pan offset scaled by zoomFactor
-            if (zoomFactor <= 0.02f) // essentially fully zoomed out -> hard snap
+            if (Mathf.Approximately(_targetSize, maxOrthoSize) || zoomFactor <= 0.001f) // fully zoomed out -> recenter
             {
                 _panOffset = Vector3.zero; // clear stored offset
-                _targetPos = _baselineCenter;
-                targetCamera.transform.position = _baselineCenter; // instant snap
+                _targetPos = adjustedCenter;
+                targetCamera.transform.position = adjustedCenter; // instant snap
             }
             else
             {
-                _targetPos = _baselineCenter + _panOffset * zoomFactor;
+                _targetPos = adjustedCenter + _panOffset * zoomFactor;
                 _targetPos = ClampToPanBounds(_targetPos);
                 // Smooth move toward target position
                 float kp = 1f - Mathf.Exp(-Mathf.Max(0f, panSmoothing) * Time.unscaledDeltaTime);
@@ -344,6 +359,29 @@ namespace BulletHeavenFortressDefense.Managers
         private bool HasCustomBounds()
         {
             return boundsMaxX > boundsMinX && boundsMaxY > boundsMinY; // valid rectangle supplied
+        }
+
+        /// <summary>
+        /// Calculate camera center adjusted for zoom level to maintain left boundary rule.
+        /// As we zoom out, shift center rightward so fortress left side stays at screen left edge.
+        /// </summary>
+        private Vector3 CalculateZoomAdjustedCenter(float currentOrthoSize)
+        {
+            // When zooming out from default size, we need to shift camera right 
+            // so that the left edge of the viewport stays at the same world position
+            
+            // At default size, left edge of viewport is at: _baselineCenter.x - (defaultHalfWidth)
+            // At current size, left edge would be at: adjustedCenter.x - (currentHalfWidth)
+            // We want these to be equal, so: adjustedCenter.x = _baselineCenter.x + (currentHalfWidth - defaultHalfWidth)
+            
+            float defaultHalfWidth = _defaultSize * targetCamera.aspect;
+            float currentHalfWidth = currentOrthoSize * targetCamera.aspect;
+            float rightwardShift = currentHalfWidth - defaultHalfWidth;
+            
+            Vector3 adjustedCenter = _baselineCenter;
+            adjustedCenter.x += rightwardShift;
+            
+            return adjustedCenter;
         }
     }
 }

@@ -75,6 +75,10 @@ namespace BulletHeavenFortressDefense.Entities
             ? (transform.position - BaseCore.Instance.transform.position).sqrMagnitude
             : float.MaxValue;
 
+        // Slow status exposure for coverage-aware towers (e.g., Slow Tower auto-aim algorithm)
+        public bool IsSlowed => _slowTimer > 0f && _speedMultiplier < 0.999f;
+        public float RemainingSlowTime => Mathf.Max(0f, _slowTimer);
+
         private void OnEnable()
         {
             if (!_activeEnemies.Contains(this))

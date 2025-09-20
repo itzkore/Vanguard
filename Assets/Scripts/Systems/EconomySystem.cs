@@ -4,7 +4,7 @@ using BulletHeavenFortressDefense.Utilities;
 
 namespace BulletHeavenFortressDefense.Systems
 {
-    public class EconomySystem : Singleton<EconomySystem>
+    public class EconomySystem : Singleton<EconomySystem>, BulletHeavenFortressDefense.Utilities.IRunResettable
     {
     [SerializeField, Tooltip("Starting Euros for a new run.")] private int startingEnergy = 1000; // raised to 1000 per user request
     [Header("Tower Cost Scaling")]
@@ -15,9 +15,9 @@ namespace BulletHeavenFortressDefense.Systems
     // final upgrade feels too cheap/expensive.
     [SerializeField] private GameEvent onEnergyChanged;
     [Header("Run Rewards (Euros)")]
-    [SerializeField, Tooltip("Base Euros awarded when a wave completes (before scaling). ")] private int perWaveBonus = 15;
-    [SerializeField, Tooltip("Additional percent per wave for the wave-complete bonus. Example: 0.25 = +25% each wave.")] private float perWaveBonusGrowth = 0.25f;
-    [SerializeField, Tooltip("Kill reward wave scaling. Example: 0.05 = +5% per wave to the enemy's base reward.")] private float killRewardWaveScale = 0.05f;
+    [SerializeField, Tooltip("Base Euros awarded when a wave completes (before scaling). ")] private int perWaveBonus = 7;
+    [SerializeField, Tooltip("Additional percent per wave for the wave-complete bonus. Example: 0.25 = +25% each wave.")] private float perWaveBonusGrowth = 0.125f;
+    [SerializeField, Tooltip("Kill reward wave scaling. Example: 0.05 = +5% per wave to the enemy's base reward.")] private float killRewardWaveScale = 0.025f;
     [SerializeField, Tooltip("Minimum Euros granted for a kill after scaling.")] private int minKillReward = 1;
 
         public int CurrentEnergy { get; private set; }
@@ -62,6 +62,7 @@ namespace BulletHeavenFortressDefense.Systems
 
         private void OnEnable()
         {
+            BulletHeavenFortressDefense.Utilities.RunResetRegistry.Register(this);
             if (BulletHeavenFortressDefense.Managers.WaveManager.HasInstance)
             {
                 BulletHeavenFortressDefense.Managers.WaveManager.Instance.WaveCompleted += HandleWaveCompleted;
@@ -70,10 +71,16 @@ namespace BulletHeavenFortressDefense.Systems
 
         private void OnDisable()
         {
+            BulletHeavenFortressDefense.Utilities.RunResetRegistry.Unregister(this);
             if (BulletHeavenFortressDefense.Managers.WaveManager.HasInstance)
             {
                 BulletHeavenFortressDefense.Managers.WaveManager.Instance.WaveCompleted -= HandleWaveCompleted;
             }
+        }
+
+        public void ResetForNewRun()
+        {
+            ResetEnergy();
         }
 
         public void ResetEnergy()

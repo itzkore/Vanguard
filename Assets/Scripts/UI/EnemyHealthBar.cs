@@ -11,9 +11,9 @@ namespace BulletHeavenFortressDefense.UI
         [SerializeField] private RectTransform canvasRoot;
         [SerializeField] private Image fill;
         [Header("Dimensions")]
-    [SerializeField, Tooltip("World-space bar width in units.")] private float width = 0.42f; // enlarged for readability
-    [SerializeField, Tooltip("World-space bar height in units.")] private float height = 0.055f; // taller for clarity
-    [SerializeField, Tooltip("Offset above enemy origin.")] private Vector2 worldOffset = new Vector2(0f, 0.34f); // closer
+    [SerializeField, Tooltip("World-space bar width in units.")] private float width = 1.10f; // ~2.6x previous
+    [SerializeField, Tooltip("World-space bar height in units.")] private float height = 0.14f; // ~2.5x taller
+    [SerializeField, Tooltip("Offset above enemy origin.")] private Vector2 worldOffset = new Vector2(0f, 0.55f); // raise above larger bar
         [Header("Behavior")]
         [SerializeField] private bool smoothFill = true;
         [SerializeField, Range(1f, 30f)] private float fillLerpSpeed = 18f;
@@ -26,8 +26,8 @@ namespace BulletHeavenFortressDefense.UI
         [SerializeField] private Color colorMid = new Color(1f, 0.9f, 0.2f, 1f);
         [SerializeField] private Color colorLow = new Color(1f, 0.2f, 0.2f, 1f);
         [SerializeField] private Color backgroundColor = Color.black;
-        [SerializeField] private Color frameColor = new Color(0.9f, 0.9f, 0.9f, 0.55f);
-        [SerializeField, Range(0.001f, 0.01f)] private float frameThickness = 0.0035f;
+        [SerializeField] private Color frameColor = new Color(0.95f, 0.95f, 0.95f, 0.85f);
+        [SerializeField, Range(0.001f, 0.02f)] private float frameThickness = 0.0075f;
 
         private EnemyController _enemy;
         private RectTransform _bgRect;
@@ -158,6 +158,25 @@ namespace BulletHeavenFortressDefense.UI
             if (canvasRoot != null && fill != null)
             {
                 if (_bgRect != null) _bgRect.sizeDelta = new Vector2(width, height);
+                // Adaptive scale for very high HP enemies (so bar wider for bosses) – optional lightweight rule
+                if (_enemy != null && _enemy.MaxHealth > 0f)
+                {
+                    float hp = _enemy.MaxHealth;
+                    // Scale width up to +60% for extremely tanky enemies (e.g., > 500 HP baseline)
+                    float mult = 1f;
+                    if (hp > 120f)
+                    {
+                        mult = Mathf.Min(1.6f, 1f + Mathf.Log10(hp / 120f) * 0.55f);
+                    }
+                    if (mult > 1.01f)
+                    {
+                        float newW = width * mult;
+                        if (_bgRect != null) _bgRect.sizeDelta = new Vector2(newW, height);
+                        if (_fillRect != null) _fillRect.sizeDelta = new Vector2(newW * fill.fillAmount, height * 0.98f);
+                        var fr = _frameImage != null ? _frameImage.rectTransform : null;
+                        if (fr != null) fr.sizeDelta = new Vector2(newW + frameThickness * 2f, height + frameThickness * 2f);
+                    }
+                }
                 return;
             }
 
@@ -209,7 +228,7 @@ namespace BulletHeavenFortressDefense.UI
             _fillRect.anchorMin = new Vector2(0f, 0f);
             _fillRect.anchorMax = new Vector2(0f, 0.5f); // width-driven for guaranteed shrink fallback
             _fillRect.pivot = new Vector2(0f, 0.5f);
-            _fillRect.sizeDelta = new Vector2(width, height * 0.98f);
+            _fillRect.sizeDelta = new Vector2(width, height * 0.92f);
         }
     }
 }

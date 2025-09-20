@@ -257,11 +257,18 @@ namespace BulletHeavenFortressDefense.Systems
             if (rightEdgeHorizontalSpacing <= 0f) rightEdgeHorizontalSpacing = 1.0f;
             if (autoCreateRightEdgePoints && rightEdgePointsCount < 1) rightEdgePointsCount = 20;
 
-            // Capture baseline camera extents so spawns are not affected by runtime zoom
+            // Capture baseline camera extents using MAX ZOOM OUT so spawns appear at far right edge when fully zoomed out
             _camCache = Camera.main;
             if (_camCache != null)
             {
-                if (_camCache.orthographic)
+                // Try to get max zoom size from CameraZoomController
+                var zoomController = FindObjectOfType<BulletHeavenFortressDefense.Managers.CameraZoomController>();
+                if (zoomController != null && _camCache.orthographic)
+                {
+                    // Use max orthographic size instead of current for spawn calculations
+                    _baseHalfHeight = zoomController.MaxOrthoSize;
+                }
+                else if (_camCache.orthographic)
                 {
                     _baseHalfHeight = _camCache.orthographicSize;
                 }

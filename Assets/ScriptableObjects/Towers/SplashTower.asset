@@ -19,8 +19,8 @@ MonoBehaviour:
   projectilePoolId: projectiles_splash
   projectileSpeedBase: 0
   buildCost: 35
-  damage: 7
-  fireRate: 1
+  damage: 11
+  fireRate: 1.25
   range: 3
   damageType: 1
   targetPriority: 0
@@ -35,10 +35,10 @@ MonoBehaviour:
   damagePerLevelMult: 1
   damageFlatPerLevel: 0
   isSplash: 1
-  splashRadiusBase: 1.5
-  splashRadiusPerLevelMult: 1.15
-  splashRadiusPerLevelFlat: 0
-  splashFalloffExponent: 1
+  splashRadiusBase: 2.1
+  splashRadiusPerLevelMult: 1.17
+  splashRadiusPerLevelFlat: 0.1
+  splashFalloffExponent: 0.85
   isSlow: 0
   slowFactorBase: 0.5
   slowFactorPerLevelAdd: -0.03

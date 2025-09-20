@@ -235,6 +235,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 3e91e549b62408945bebf8ef14e4aeca, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  autoDestroyDuplicateInstances: 1
   unlockedTowers:
   - {fileID: 11400000, guid: 8a3f68e5e9a2ec64ca2f254c8a075880, type: 2}
   - {fileID: 11400000, guid: 0460350679a8e084ab0ba69a5b1230d1, type: 2}
@@ -376,6 +377,18 @@ MonoBehaviour:
   minEnemySpawnX: -9999
   forceRightEdgeColumn: 1
   rightEdgeRandomInsetMax: 0.2
+  rightEdgeSpawnPattern: 2
+  randomizePatternPerWave: 0
+  patternHorizontalDepth: 5
+  patternVerticalPadding: 0.02
+  sinePatternWaves: 3
+  patternMicroJitter: 0.0035
+  patternSeed: 0
+  earlyWaveFastStart: 1
+  fastStartWaves: 2
+  earlyWaveRightEdgeOffset: 0.75
+  firstWaveInstantBurstCount: 6
+  firstWaveIntervalClamp: 0.25
   progressiveLargeWaveSpawning: 1
   progressiveSpawnThreshold: 60
   maxEnemySpawnsPerFrame: 20
@@ -658,7 +671,6 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 1047173761}
-  - component: {fileID: 1047173760}
   m_Layer: 0
   m_Name: FXRoot
   m_TagString: Untagged
@@ -666,22 +678,6 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!114 &1047173760
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1047173759}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: c1c63c3673c863c46a1d5408b204a91c, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  damageTextPrefab: {fileID: -9126141028814270343, guid: aa8bf8e69e901bb41a392c2fd56fd5fa, type: 3}
-  poolSize: 64
-  yOffset: 0.4
-  textParent: {fileID: 0}
 --- !u!4 &1047173761
 Transform:
   m_ObjectHideFlags: 0

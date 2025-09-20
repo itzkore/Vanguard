@@ -3,6 +3,7 @@ using BulletHeavenFortressDefense.Data;
 using BulletHeavenFortressDefense.Managers;
 using BulletHeavenFortressDefense.Fortress;
 using BulletHeavenFortressDefense.Projectiles; // SniperProjectile reference
+using System.Collections.Generic; // for slow coverage sorting
 
 namespace BulletHeavenFortressDefense.Entities
 {
@@ -186,6 +187,11 @@ namespace BulletHeavenFortressDefense.Entities
             return _data != null && level < _data.MaxLevel;
         }
 
+        // Fired after this tower successfully launches its volley (at least one projectile)
+        public event System.Action<TowerBehaviour> Fired;
+        // Fired after stats (damage, fire rate, range, splash radius, slow params) are recalculated (initialization & upgrade)
+        public event System.Action<TowerBehaviour> StatsRecalculated;
+
         public int GetNextUpgradeCost()
         {
             if (!CanUpgrade()) return 0;
@@ -250,6 +256,7 @@ namespace BulletHeavenFortressDefense.Entities
             {
                 fireCooldown = 1f;
                 _rangeSquared = 0f;
+                StatsRecalculated?.Invoke(this);
                 return;
             }
 
@@ -332,6 +339,8 @@ namespace BulletHeavenFortressDefense.Entities
                 CurrentSlowDuration = 0f;
                 CurrentProjectilesPerShot = 1;
             }
+
+            StatsRecalculated?.Invoke(this);
         }
 
         private void AcquireTarget()
@@ -347,6 +356,41 @@ namespace BulletHeavenFortressDefense.Entities
             }
 
             if (_currentTarget != null) return; // still valid
+
+            // Specialized coverage-driven targeting for Slow Towers: prioritize unslowed enemies first,
+            // then those whose slow is about to expire, with a slight bias toward enemies near the edge of range.
+            if (_data != null && _data.IsSlow)
+            {
+                EnemyController best = null;
+                float slowCoverageBestScore = float.MaxValue; // lower = better
+                foreach (var enemy in EnemyController.ActiveEnemies)
+                {
+                    if (enemy == null || !enemy.IsAlive) continue;
+                    float distSq = (enemy.Position - transform.position).sqrMagnitude;
+                    if (distSq > _rangeSquared) continue;
+                    float score = ComputeSlowCoverageScore(enemy, distSq);
+                    // Incorporate a mild focus penalty so multiple slow towers spread debuff more evenly
+                    if (AI.TargetFocusCoordinator.HasInstance)
+                    {
+                        score += AI.TargetFocusCoordinator.Instance.GetPenalty(enemy) * 0.05f;
+                    }
+                    if (score < slowCoverageBestScore)
+                    {
+                        slowCoverageBestScore = score;
+                        best = enemy;
+                    }
+                }
+                if (best != null)
+                {
+                    _currentTarget = best;
+                    if (AI.TargetFocusCoordinator.HasInstance)
+                    {
+                        AI.TargetFocusCoordinator.Instance.NotifyFocus(_currentTarget);
+                    }
+                    return; // done
+                }
+                // Fallback to generic logic below if none found (unlikely)
+            }
 
             EnemyController bestCandidate = null;
             float bestScore = float.MaxValue; // lower is better
@@ -429,25 +473,32 @@ namespace BulletHeavenFortressDefense.Entities
             int shots = Mathf.Max(1, CurrentProjectilesPerShot);
             if (_data.IsSlow && shots > 1)
             {
-                // Build a unique target list up to 'shots'
-                System.Collections.Generic.List<EnemyController> targets = new System.Collections.Generic.List<EnemyController>(shots);
+                // Coverage-focused selection: score enemies (unslowed first, then expiring slows, then edge cases)
+                List<(EnemyController enemy, float score)> scored = new List<(EnemyController, float)>();
                 foreach (var enemy in EnemyController.ActiveEnemies)
                 {
                     if (enemy == null || !enemy.IsAlive) continue;
                     float distSq = (enemy.Position - transform.position).sqrMagnitude;
                     if (distSq > _rangeSquared) continue;
-                    targets.Add(enemy);
-                    if (targets.Count >= shots) break;
+                    float s = ComputeSlowCoverageScore(enemy, distSq);
+                    scored.Add((enemy, s));
                 }
-                if (targets.Count == 0)
+                if (scored.Count == 0)
                 {
-                    // fallback primary
-                    targets.Add(_currentTarget);
+                    scored.Add((_currentTarget, 0f));
                 }
-                // If fewer enemies than desired, just limit shot count (no duplicate targets)
-                shots = targets.Count;
+                // Sort ascending by score (lower is better)
+                scored.Sort((a, b) => a.score.CompareTo(b.score));
+                int select = Mathf.Min(shots, scored.Count);
+                List<EnemyController> targets = new List<EnemyController>(select);
+                for (int i = 0; i < select; i++)
+                {
+                    targets.Add(scored[i].enemy);
+                }
+                shots = select;
                 StopAllCoroutines();
-                StartCoroutine(SlowTowerSequentialFire(targets, 0.08f)); // 80ms spacing
+                StartCoroutine(SlowTowerSequentialFire(targets, 0.08f));
+                Fired?.Invoke(this);
             }
             else
             {
@@ -462,6 +513,10 @@ namespace BulletHeavenFortressDefense.Entities
                         spreadDir = Quaternion.Euler(0f, 0f, angle) * direction;
                     }
                     LaunchProjectile(spreadDir);
+                }
+                if (shots > 0)
+                {
+                    Fired?.Invoke(this);
                 }
             }
         }
@@ -492,14 +547,48 @@ namespace BulletHeavenFortressDefense.Entities
             }
         }
 
+        // Computes a coverage score for slow distribution; lower score = higher priority.
+        // Priorities:
+        // 1) Unslowed enemies get a large negative offset to guarantee first pick.
+        // 2) Among slowed enemies, those with the least remaining slow time are prioritized.
+        // 3) Slight preference to enemies nearer the edge of range (so they are slowed before leaving).
+        private float ComputeSlowCoverageScore(EnemyController enemy, float distSq)
+        {
+            bool unslowed = !enemy.IsSlowed;
+            float baseScore = 0f;
+            if (unslowed)
+            {
+                baseScore -= 10000f; // dominate all other factors
+            }
+            else
+            {
+                // Remaining slow time scaled: shorter remaining => lower score
+                baseScore += enemy.RemainingSlowTime * 100f; // amplify so time dominates over distance subtlety
+            }
+
+            // Edge proximity factor (0 center, 1 edge) -> reduce score slightly near edge to apply slow before exiting
+            if (_rangeSquared > 0.0001f)
+            {
+                float edgeProximity = Mathf.Clamp01(distSq / _rangeSquared);
+                baseScore -= edgeProximity * 5f; // small influence
+            }
+            return baseScore;
+        }
+
         private void LaunchProjectile(Vector3 direction)
         {
             GameObject projectileObj = null;
+            // 1) Try generic ObjectPoolManager if an explicit pool id is provided.
             if (!string.IsNullOrEmpty(_data.ProjectilePoolId) && ObjectPoolManager.HasInstance)
             {
                 projectileObj = ObjectPoolManager.Instance.Spawn(_data.ProjectilePoolId, muzzle.position, Quaternion.identity);
             }
-
+            // 2) Fallback to specialized ProjectilePool (auto bucket on prefab) when no explicit pool id or generic pool returned null.
+            if (projectileObj == null && _data.ProjectilePrefab != null && Pooling.ProjectilePool.HasInstance)
+            {
+                projectileObj = Pooling.ProjectilePool.Get(_data.ProjectilePrefab, muzzle.position, Quaternion.identity);
+            }
+            // 3) Final fallback: direct Instantiate (keeps legacy behavior if no pool present yet).
             if (projectileObj == null && _data.ProjectilePrefab != null)
             {
                 projectileObj = Instantiate(_data.ProjectilePrefab, muzzle.position, Quaternion.identity);

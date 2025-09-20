@@ -114,7 +114,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 2a5f04eeaa2a7c046900d5a74f292f45, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  speed: 8
+  speed: 13
   maxLifetime: 5
   useContinuousSweep: 1
   sweepRadius: 0.08

@@ -52,6 +52,23 @@ namespace BulletHeavenFortressDefense.Fortress
         private void Update()
         {
             if (!autoAlignLeft || !_built) return;
+            
+            // Don't auto-align when camera is zoomed out beyond default size
+            // Let CameraZoomController handle positioning during zoom
+            var cam = Camera.main;
+            if (cam != null && cam.orthographic)
+            {
+                var zoomController = FindObjectOfType<BulletHeavenFortressDefense.Managers.CameraZoomController>();
+                if (zoomController != null)
+                {
+                    // Only auto-align when at or close to default zoom level
+                    if (cam.orthographicSize > zoomController.DefaultSize + 0.1f)
+                    {
+                        return; // Skip auto-align during zoom-out
+                    }
+                }
+            }
+            
             if (Screen.width != _lastScreenW || Screen.height != _lastScreenH)
             {
                 AlignLeft();

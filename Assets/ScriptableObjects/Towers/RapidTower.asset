@@ -54,3 +54,4 @@ MonoBehaviour:
   sniperCritMultiplier: 2.5
   sniperRangeMultiplier: 2.5
   sniperProjectileSpeed: 0
+  visualProfile: {fileID: 11400000, guid: 6ebaba6610d0d9b499e6ba4d48568523, type: 2}

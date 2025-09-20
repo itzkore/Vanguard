@@ -60,10 +60,18 @@ namespace BulletHeavenFortressDefense.UI
         private void ShowWithStats()
         {
             if (debugLogging) Debug.Log("[GameOverController] ShowWithStats");
-            int kills = WaveManager.HasInstance ? WaveManager.Instance.TotalKills : 0;
-            int wave = WaveManager.HasInstance ? WaveManager.Instance.CurrentWaveNumber : 0;
+            int kills = 0;
+            int best = 0;
+            int wave = 0;
+            if (WaveManager.HasInstance)
+            {
+                // Prefer last run captured kills (TotalKills may already be 0 if sequence stopped)
+                kills = WaveManager.Instance.LastRunKills > 0 ? WaveManager.Instance.LastRunKills : WaveManager.Instance.TotalKills;
+                best = WaveManager.Instance.BestRunKills;
+                wave = WaveManager.Instance.CurrentWaveNumber;
+            }
             if (titleText != null) titleText.text = "Game Over";
-            if (statsText != null) statsText.text = $"Kills: {kills}\nWave: {wave}";
+            if (statsText != null) statsText.text = $"Kills: {kills}\nBest: {best}\nWave: {wave}";
             if (canvas != null) canvas.gameObject.SetActive(true);
         }
 

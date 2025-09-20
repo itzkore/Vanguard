@@ -57,6 +57,16 @@ namespace BulletHeavenFortressDefense.Fortress
             }
         }
 
+        /// <summary>
+        /// Convenience refresh that queries the mount each call rather than relying on caller to pass canPlace.
+        /// </summary>
+        public void Refresh()
+        {
+            if (_mount == null) _mount = GetComponent<FortressMount>();
+            bool canPlace = _mount != null && _mount.CanPlaceTower();
+            SetVisible(true, canPlace);
+        }
+
         private static Sprite CreateSolidSprite(Color color)
         {
             var tex = new Texture2D(1, 1, TextureFormat.RGBA32, false);

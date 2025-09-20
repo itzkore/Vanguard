@@ -13,6 +13,15 @@ namespace BulletHeavenFortressDefense.Entities
     [SerializeField, Tooltip("Runtime current radius (set from TowerData each shot). ")] private float radius = 1.5f;
     [SerializeField] private float falloffExponent = 1f;
         [SerializeField] private LayerMask hitMask = ~0;
+        [Header("VFX")]
+        [SerializeField, Tooltip("Optional particle system prefab spawned on impact (auto-scaled to radius).")]
+        private GameObject explosionVfxPrefab;
+        [SerializeField, Tooltip("Optional light/flash prefab (e.g., small sprite flash) for a brief burst.")]
+        private GameObject flashPrefab;
+        [SerializeField, Tooltip("Lifetime for spawned VFX (seconds) if they don't auto-destroy.")] private float vfxLifetime = 1.2f;
+        [SerializeField, Tooltip("Clamp min scale for explosion visual.")] private float minVfxScale = 0.35f;
+        [SerializeField, Tooltip("Clamp max scale for explosion visual.")] private float maxVfxScale = 4.5f;
+        [SerializeField, Tooltip("If true, reuse (enable/disable) any existing child VFX object named 'ActiveExplosion' instead of instantiating.")] private bool reuseChildVfx = true;
 
         private float _damage;
         private DamageType _damageType;
@@ -20,6 +29,7 @@ namespace BulletHeavenFortressDefense.Entities
         private Vector3 _direction = Vector3.right;
         private string _poolId;
         private bool _exploded;
+    private static readonly int ColorID = Shader.PropertyToID("_Color");
 
         private static readonly Collider2D[] _overlapResults = new Collider2D[64];
 
@@ -97,7 +107,83 @@ namespace BulletHeavenFortressDefense.Entities
                 Debug.Log($"[Splash] radius={radius:F2} damaged={damaged}");
             }
 
+            SpawnExplosionVfx();
+
             Despawn();
+        }
+
+        private void SpawnExplosionVfx()
+        {
+            // Visual only; ignore if no prefabs assigned
+            if (explosionVfxPrefab == null && flashPrefab == null) return;
+
+            float targetScale = Mathf.Clamp(radius * 0.65f, minVfxScale, maxVfxScale);
+
+            if (explosionVfxPrefab != null)
+            {
+                GameObject fx = null;
+                if (reuseChildVfx)
+                {
+                    var existing = transform.Find("ActiveExplosion");
+                    if (existing != null)
+                    {
+                        fx = existing.gameObject;
+                        fx.SetActive(true);
+                    }
+                }
+                if (fx == null)
+                {
+                    fx = Instantiate(explosionVfxPrefab, transform.position, Quaternion.identity, reuseChildVfx ? transform : null);
+                    if (reuseChildVfx)
+                    {
+                        fx.name = "ActiveExplosion"; // canonical name for reuse
+                    }
+                }
+                fx.transform.localScale = Vector3.one * targetScale;
+                // Auto-disable/destroy after lifetime if no self-destroyer
+                if (vfxLifetime > 0f)
+                {
+                    if (reuseChildVfx)
+                    {
+                        // schedule disable
+                        StartCoroutine(DisableAfter(fx, vfxLifetime));
+                    }
+                    else
+                    {
+                        Destroy(fx, vfxLifetime);
+                    }
+                }
+                // If particle system exists, trigger play
+                var ps = fx.GetComponent<ParticleSystem>();
+                if (ps != null)
+                {
+                    ps.Play(true);
+                }
+            }
+
+            if (flashPrefab != null)
+            {
+                var flash = Instantiate(flashPrefab, transform.position, Quaternion.identity);
+                flash.transform.localScale = Vector3.one * targetScale * 0.9f;
+                if (vfxLifetime > 0f)
+                {
+                    Destroy(flash, Mathf.Min(0.35f, vfxLifetime * 0.5f));
+                }
+            }
+        }
+
+        private System.Collections.IEnumerator DisableAfter(GameObject go, float delay)
+        {
+            float t = 0f;
+            while (t < delay)
+            {
+                t += Time.deltaTime;
+                yield return null;
+            }
+            if (go != null)
+            {
+                go.SetActive(false);
+            }
         }
 
         private void Despawn()
