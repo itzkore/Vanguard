@@ -194,6 +194,21 @@ namespace BulletHeavenFortressDefense.UI
                 var txt = rt.GetComponentInChildren<Text>();
                 if (txt != null) txt.fontSize = Mathf.RoundToInt(fontSize * 0.45f);
             }
+            var speedBtn = GameObject.Find("GameSpeedButton");
+            if (speedBtn != null && menuBtn != null)
+            {
+                var mrt = menuBtn.GetComponent<RectTransform>();
+                var srt = speedBtn.GetComponent<RectTransform>();
+                float safeRight = applySafeArea ? _safeInsetBR.x : 0f;
+                float safeTop = applySafeArea ? _safeInsetTL.y : 0f;
+                float smallW = SX(BASE_MENU_BTN_W * 0.55f);
+                float smallH = SY(BASE_MENU_BTN_H * 0.55f);
+                float gap = SX(8f);
+                srt.sizeDelta = new Vector2(smallW, smallH);
+                    srt.anchoredPosition = new Vector2(-SX(12f) - safeRight - mrt.sizeDelta.x - gap, -SY(12f) - safeTop);
+                var lbl = speedBtn.GetComponentInChildren<Text>();
+                if (lbl != null) lbl.fontSize = Mathf.RoundToInt(fontSize * 0.36f);
+            }
             // Status bar
             var status = GameObject.Find("StatusPanel");
             if (status != null)
@@ -883,6 +898,43 @@ namespace BulletHeavenFortressDefense.UI
                 }
                 pm.TogglePause();
             });
+
+            // Create Speed Toggle Button (smaller) to the LEFT of menu button
+            if (canvasRoot.Find("GameSpeedButton") == null)
+            {
+                var spd = new GameObject("GameSpeedButton", typeof(RectTransform));
+                spd.layer = LayerMask.NameToLayer("UI");
+                var srt = spd.GetComponent<RectTransform>();
+                srt.SetParent(canvasRoot, false);
+                srt.anchorMin = new Vector2(1f,1f);
+                srt.anchorMax = new Vector2(1f,1f);
+                srt.pivot = new Vector2(1f,1f);
+                // position: same Y as menu, X shifted left by its width + small gap
+                float gap = SX(8f);
+                float smallW = SX(BASE_MENU_BTN_W * 0.55f);
+                float smallH = SY(BASE_MENU_BTN_H * 0.55f);
+                // pivot (1,1): move left by menu width + gap (no need to add own width)
+                srt.anchoredPosition = new Vector2(-SX(12f) - safeRight - rt.sizeDelta.x - gap, -SY(12f) - safeTop);
+                srt.sizeDelta = new Vector2(smallW, smallH);
+                var bImg = spd.AddComponent<Image>();
+                bImg.color = new Color(0f,0f,0f,0.9f);
+                var outline2 = spd.AddComponent<Outline>();
+                outline2.effectColor = new Color(0.95f,0.95f,0.95f,0.85f);
+                outline2.effectDistance = new Vector2(1f,-1f);
+                var btn2 = spd.AddComponent<Button>();
+                var speedLabelGO = new GameObject("Label", typeof(RectTransform));
+                speedLabelGO.transform.SetParent(spd.transform, false);
+                var lr = speedLabelGO.GetComponent<RectTransform>();
+                lr.anchorMin = Vector2.zero; lr.anchorMax = Vector2.one; lr.offsetMin = Vector2.zero; lr.offsetMax = Vector2.zero;
+                var txt2 = speedLabelGO.AddComponent<Text>();
+                txt2.text = "1x"; txt2.font = font; txt2.color = Color.white; txt2.alignment = TextAnchor.MiddleCenter; txt2.fontSize = Mathf.RoundToInt(fontSize * 0.36f);
+                var logic = spd.AddComponent<SpeedToggleButton>();
+                logic.GetType(); // prevent unused warning (no-op)
+                logic.GetComponent<SpeedToggleButton>();
+                // Inject label reference via reflection safe route: direct field since same assembly
+                var f = typeof(SpeedToggleButton).GetField("label", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                f?.SetValue(logic, txt2);
+            }
         }
 
         private Button CreateButton(Transform parent, string text, Font font, bool small = false)

@@ -328,72 +328,76 @@ namespace BulletHeavenFortressDefense.Entities
 
         private void AcquireTarget()
         {
-            if (_currentTarget != null)
+            // Release focus if old target invalid now
+            if (_currentTarget != null && (!_currentTarget.IsAlive || (_currentTarget.Position - transform.position).sqrMagnitude > _rangeSquared))
             {
-                if (!_currentTarget.IsAlive || (_currentTarget.Position - transform.position).sqrMagnitude > _rangeSquared)
+                if (AI.TargetFocusCoordinator.HasInstance)
                 {
-                    _currentTarget = null;
+                    AI.TargetFocusCoordinator.Instance.NotifyRelease(_currentTarget);
                 }
+                _currentTarget = null;
             }
 
-            if (_currentTarget != null)
-            {
-                return;
-            }
+            if (_currentTarget != null) return; // still valid
 
             EnemyController bestCandidate = null;
-            float bestScore = float.MaxValue;
+            float bestScore = float.MaxValue; // lower is better
             float bestHealth = float.MinValue;
             float lowestHealth = float.MaxValue;
 
             foreach (var enemy in EnemyController.ActiveEnemies)
             {
-                if (enemy == null || !enemy.IsAlive)
-                {
-                    continue;
-                }
-
+                if (enemy == null || !enemy.IsAlive) continue;
                 float distanceSq = (enemy.Position - transform.position).sqrMagnitude;
-                if (distanceSq > _rangeSquared)
-                {
-                    continue;
-                }
+                if (distanceSq > _rangeSquared) continue;
 
+                float baseMetric = 0f; // underlying metric before penalty
                 switch (_data.TargetPriority)
                 {
                     case TargetPriority.ClosestToTower:
-                        if (distanceSq < bestScore)
-                        {
-                            bestScore = distanceSq;
-                            bestCandidate = enemy;
-                        }
+                        baseMetric = distanceSq;
                         break;
                     case TargetPriority.ClosestToBase:
-                        float baseDist = enemy.DistanceToBaseSquared;
-                        if (baseDist < bestScore)
-                        {
-                            bestScore = baseDist;
-                            bestCandidate = enemy;
-                        }
+                        baseMetric = enemy.DistanceToBaseSquared;
                         break;
                     case TargetPriority.HighestHealth:
                         if (enemy.RemainingHealth > bestHealth)
                         {
                             bestHealth = enemy.RemainingHealth;
-                            bestCandidate = enemy;
                         }
+                        // we invert by negating health later
+                        baseMetric = -enemy.RemainingHealth;
                         break;
                     case TargetPriority.LowestHealth:
                         if (enemy.RemainingHealth < lowestHealth)
                         {
                             lowestHealth = enemy.RemainingHealth;
-                            bestCandidate = enemy;
                         }
+                        baseMetric = enemy.RemainingHealth;
                         break;
+                }
+
+                float penalty = 0f;
+                if (AI.TargetFocusCoordinator.HasInstance)
+                {
+                    penalty = AI.TargetFocusCoordinator.Instance.GetPenalty(enemy);
+                }
+                float finalScore = baseMetric + penalty;
+                if (finalScore < bestScore)
+                {
+                    bestScore = finalScore;
+                    bestCandidate = enemy;
                 }
             }
 
-            _currentTarget = bestCandidate;
+            if (bestCandidate != null)
+            {
+                _currentTarget = bestCandidate;
+                if (AI.TargetFocusCoordinator.HasInstance)
+                {
+                    AI.TargetFocusCoordinator.Instance.NotifyFocus(_currentTarget);
+                }
+            }
         }
 
         private void FireAtTarget()

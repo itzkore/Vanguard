@@ -42,6 +42,20 @@ namespace BulletHeavenFortressDefense.Managers
     [SerializeField, Tooltip("Clamp so enemies never spawn with X less than this (prevents appearing inside the fortress area).")] private float minEnemySpawnX = -9999f;
     [SerializeField, Tooltip("If true, ignore horizontal left-shift spacing so all right-edge spawns appear in a vertical column.")] private bool forceRightEdgeColumn = true;
     [SerializeField, Tooltip("Max random inward (left) inset when forcing a column, to avoid perfect overlap. 0 = none.")] private float rightEdgeRandomInsetMax = 0.2f;
+    [Header("Early Wave Fast Start")]
+    [SerializeField, Tooltip("If true, early waves use a reduced right-edge offset so enemies appear sooner.")] private bool earlyWaveFastStart = true;
+    [SerializeField, Tooltip("Number of initial waves to apply fast-start adjustments to.")] private int fastStartWaves = 2;
+    [SerializeField, Tooltip("Override right-edge extra offset for early waves (typically 0 to 0.75)." )] private float earlyWaveRightEdgeOffset = 0.75f;
+
+    // Returns effective right edge offset factoring early-wave override
+    private float GetEffectiveRightEdgeOffset()
+    {
+        if (earlyWaveFastStart && CurrentWaveNumber > 0 && CurrentWaveNumber <= Mathf.Max(1, fastStartWaves))
+        {
+            return earlyWaveRightEdgeOffset;
+        }
+        return rightEdgeExtraOffset;
+    }
     [Header("Performance / Progressive Spawning")]
     [SerializeField, Tooltip("Enable throttling of very large spawn bursts to avoid single-frame hitching (notably > ~100 enemies)")] private bool progressiveLargeWaveSpawning = true;
     [SerializeField, Tooltip("If an individual spawn entry (count) >= this threshold AND progressive spawning enabled, it will be spread across multiple frames.")] private int progressiveSpawnThreshold = 60;
@@ -687,9 +701,41 @@ namespace BulletHeavenFortressDefense.Managers
                     continue;
                 }
 
+                // Early-wave instant burst: only for wave 1 (CurrentWaveNumber==1) and first spawn entry
+                if (CurrentWaveNumber == 1 && i == 0 && firstWaveInstantBurstCount > 0 && entry.count > 0)
+                {
+                    int burst = Mathf.Min(firstWaveInstantBurstCount, entry.count);
+                    if (verboseLogging) Debug.Log($"[WaveManager][FastStart] Instant burst spawning {burst}/{entry.count} for first wave.");
+                    for (int b = 0; b < burst; b++)
+                    {
+                        float tBurst = (entry.count <= 1) ? UnityEngine.Random.value : (b + 0.5f) / entry.count;
+                        var posBurst = SpawnSystem.Instance.GetRightEdgePositionAtNormalizedY(tBurst);
+                        posBurst.x += GetEffectiveRightEdgeOffset();
+                        posBurst.y += (UnityEngine.Random.value - 0.5f) * 0.05f;
+                        var enemyBurst = SpawnSystem.Instance.SpawnEnemyAtPosition(entry.enemyData, posBurst);
+                        if (enemyBurst != null)
+                        {
+                            _activeWaveEnemyIds.Add(enemyBurst.GetInstanceID());
+                            spawned++;
+                            enemyBurst.ApplyBalanceOverrides(_rapidBaseDamage, CurrentWaveNumber);
+                        }
+                    }
+                    entry.count -= burst; // reduce remaining to be handled by normal logic
+                    if (entry.count <= 0) continue; // nothing left to process for this entry
+                }
+
                 bool largeEntry = progressiveLargeWaveSpawning && entry.count >= Mathf.Max(1, progressiveSpawnThreshold);
                 if (entry.spawnAlongRightEdge)
                 {
+                    // Apply first-wave interval clamp (affects post-burst wait only) before we process
+                    if (CurrentWaveNumber == 1 && i == 0 && firstWaveIntervalClamp > 0f && entry.spawnInterval > 0f)
+                    {
+                        if (entry.spawnInterval > firstWaveIntervalClamp && verboseLogging)
+                        {
+                            Debug.Log($"[WaveManager][FastStart] Clamping first wave spawnInterval {entry.spawnInterval:F2} -> {firstWaveIntervalClamp:F2}");
+                        }
+                        entry.spawnInterval = Mathf.Min(entry.spawnInterval, firstWaveIntervalClamp);
+                    }
                     // Burst spawn path: optionally progressive if very large.
                     int totalPoints = SpawnSystem.Instance.EnsureEdgeSpawnPoints(entry.count);
                     float spacing = Mathf.Max(SpawnSystem.Instance.RightEdgeHorizontalSpacing, 0.01f);
@@ -736,7 +782,7 @@ namespace BulletHeavenFortressDefense.Managers
                         {
                             float t = (entry.count <= 1) ? UnityEngine.Random.value : (j + 0.5f) / entry.count;
                             var basePos = SpawnSystem.Instance.GetRightEdgePositionAtNormalizedY(t);
-                            float baseEdgeX = basePos.x + rightEdgeExtraOffset;
+                            float baseEdgeX = basePos.x + GetEffectiveRightEdgeOffset();
                             if (forceRightEdgeColumn)
                             {
                                 float inset = (rightEdgeRandomInsetMax > 0f) ? UnityEngine.Random.value * rightEdgeRandomInsetMax : 0f;
@@ -805,7 +851,7 @@ namespace BulletHeavenFortressDefense.Managers
                             var pos = SpawnSystem.Instance.GetRightEdgePositionAtNormalizedY(t);
                             // slight jitter to avoid stacking
                             pos.y += (UnityEngine.Random.value - 0.5f) * 0.05f;
-                            pos.x += rightEdgeExtraOffset;
+                            pos.x += GetEffectiveRightEdgeOffset();
                             if (pos.x < minEnemySpawnX) pos.x = minEnemySpawnX;
                             if (verboseLogging) Debug.Log($"[WaveManager] Lane fallback → right-edge j={j}, t={t:F2}, pos=({pos.x:F2},{pos.y:F2})");
                             enemy = SpawnSystem.Instance.SpawnEnemyAtPosition(entry.enemyData, pos);

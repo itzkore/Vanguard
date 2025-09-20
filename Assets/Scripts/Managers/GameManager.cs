@@ -76,8 +76,15 @@ namespace BulletHeavenFortressDefense.Managers
 
         public void StartRun()
         {
-            // Ensure time scale restored to base (may have been paused or different state)
-            ApplyBaseGameSpeed();
+            // Force-restore time scale even if it was set to 0f by GameOver (ApplyBaseGameSpeed previously early-exited on 0)
+            if (Mathf.Approximately(Time.timeScale, 0f))
+            {
+                Time.timeScale = baseGameSpeed;
+            }
+            else
+            {
+                ApplyBaseGameSpeed();
+            }
             BaseCore.Instance?.RestoreFullHealth();
             EconomySystem.Instance?.ResetEnergy();
 
@@ -103,7 +110,7 @@ namespace BulletHeavenFortressDefense.Managers
             {
                 WaveManager.Instance.StopSequence();
             }
-            // Freeze the game world while showing Game Over UI
+            // Freeze the game world while showing Game Over UI. NOTE: StartRun now force-restores from 0.
             Time.timeScale = 0f;
         }
 
