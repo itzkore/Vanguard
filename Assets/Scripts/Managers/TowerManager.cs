@@ -19,11 +19,27 @@ namespace BulletHeavenFortressDefense.Managers
         [Header("Rendering")]
         [SerializeField] private int towerSortingOrder = 5; // ensure towers render above walls (order 0)
 
+        [Header("Late Discovery / Reliability")]
+        [Tooltip("Max retry attempts to rescan Resources/TowerData for late-loaded tower assets (runtime builds)." )]
+        [SerializeField] private int lateDiscoveryMaxAttempts = 6;
+        [Tooltip("Seconds between late discovery rescan attempts.")]
+        [SerializeField] private float lateDiscoveryInterval = 0.75f;
+        [Tooltip("If true, logs every rescan attempt (can be noisy in production builds)." )]
+        [SerializeField] private bool verboseLateDiscoveryLogging = true;
+
         private readonly List<Entities.TowerBehaviour> _activeTowers = new();
+        private int _lateDiscoveryAttempts = 0;
+        private bool _lateDiscoveryRoutineStarted = false;
 
         public IReadOnlyList<TowerData> UnlockedTowers => unlockedTowers;
     // Expose active towers for selection / diagnostics (read-only)
     public IReadOnlyList<Entities.TowerBehaviour> ActiveTowers => _activeTowers;
+
+        /// <summary>
+        /// Fired whenever the unlocked towers list changes (addition/removal) after initial Awake sequence.
+        /// UI (e.g., BuildMenuController) can subscribe to refresh automatically when new towers appear.
+        /// </summary>
+        public event System.Action TowersChanged;
 
         protected override void Awake()
         {
@@ -47,6 +63,11 @@ namespace BulletHeavenFortressDefense.Managers
                     Debug.Log($"[TowerManager] Unlocked: {(t != null ? t.name : "<null>")}");
                 }
             }
+
+#if !UNITY_EDITOR
+            // Start late discovery routine in runtime builds to catch assets that become available slightly later (e.g., addressable warmup)
+            StartLateDiscoveryRoutine();
+#endif
         }
 
     // Editor-only population utility must be excluded from player builds (calls AssetDatabase)
@@ -165,6 +186,74 @@ namespace BulletHeavenFortressDefense.Managers
                 return string.Compare(a.DisplayName, b.DisplayName, System.StringComparison.Ordinal);
             });
         }
+
+        private void LateUpdate()
+        {
+            // One-time diagnostic to help ensure Rapid tower appears in build menu on mobile.
+            if (!_reportedRapidTower)
+            {
+                _reportedRapidTower = true;
+                bool found = false;
+                if (unlockedTowers != null)
+                {
+                    for (int i = 0; i < unlockedTowers.Count; i++)
+                    {
+                        var td = unlockedTowers[i];
+                        if (td != null && td.DisplayName.ToLower().Contains("rapid")) { found = true; break; }
+                    }
+                }
+                if (!found)
+                {
+                    Debug.LogWarning("[TowerManager] Rapid tower not found after initialization. Attempting late discovery via Resources. Verbose listing all loaded TowerData below.");
+                    // Enumerate what we DO have first
+                    if (unlockedTowers == null || unlockedTowers.Count == 0)
+                        Debug.LogWarning("[TowerManager][Diag] unlockedTowers list currently EMPTY.");
+                    else
+                    {
+                        for (int i = 0; i < unlockedTowers.Count; i++)
+                        {
+                            var td0 = unlockedTowers[i];
+                            Debug.Log("[TowerManager][Diag] List["+i+"]=" + (td0? td0.DisplayName + " (objId="+td0.GetInstanceID()+")" : "<null>") );
+                        }
+                    }
+                    var scan = Resources.LoadAll<TowerData>("TowerData");
+                    if (scan == null || scan.Length == 0)
+                    {
+                        Debug.LogWarning("[TowerManager][Diag] Resources.LoadAll<TowerData>(TowerData) returned NONE. Check that assets exist at Assets/Resources/TowerData/*.asset and are included in build.");
+                    }
+                    else
+                    {
+                        Debug.Log("[TowerManager][Diag] Resources scan count="+scan.Length);
+                        int rapidNameHits = 0;
+                        for (int i = 0; i < scan.Length; i++)
+                        {
+                            var td1 = scan[i];
+                            if (td1 == null) { Debug.LogWarning("[TowerManager][Diag] Scan["+i+"] is <null>"); continue; }
+                            bool nameRapid = !string.IsNullOrEmpty(td1.DisplayName) && td1.DisplayName.ToLower().Contains("rapid");
+                            if (nameRapid) rapidNameHits++;
+                            Debug.Log("[TowerManager][Diag] Scan["+i+"]="+td1.DisplayName+" (objId="+td1.GetInstanceID()+") rapidName="+nameRapid);
+                        }
+                        if (rapidNameHits == 0)
+                        {
+                            Debug.LogWarning("[TowerManager][Diag] No TowerData assets with 'rapid' in DisplayName discovered in Resources. Potential causes: (1) Asset not moved into Resources/TowerData, (2) Addressables label not loaded yet, (3) Different localization/name.");
+                        }
+                    }
+                    var extra = Resources.LoadAll<TowerData>("TowerData");
+                    int added = 0;
+                    if (extra != null)
+                    {
+                        for (int i = 0; i < extra.Length; i++)
+                        {
+                            var td2 = extra[i]; if (td2 == null) continue;
+                            if (AddTowerInternal(td2)) { added++; }
+                        }
+                    }
+                    if (added > 0) { DeduplicateAndSort(); Debug.Log("[TowerManager] Late discovery added " + added + " TowerData assets."); FireTowersChanged(); }
+                }
+            }
+        }
+
+        private bool _reportedRapidTower = false;
 
 #if UNITY_EDITOR
         [ContextMenu("Force Discover Towers (All)")]
@@ -333,6 +422,125 @@ namespace BulletHeavenFortressDefense.Managers
 
             float uniformScale = mountSize / maxDim;
             tower.transform.localScale = new Vector3(uniformScale, uniformScale, 1f);
+        }
+
+        #region Late Discovery Routine
+        private void StartLateDiscoveryRoutine()
+        {
+            if (_lateDiscoveryRoutineStarted) return;
+            _lateDiscoveryRoutineStarted = true;
+            if (lateDiscoveryMaxAttempts <= 0) return;
+            StartCoroutine(LateDiscoveryCoroutine());
+        }
+
+        private System.Collections.IEnumerator LateDiscoveryCoroutine()
+        {
+            // Skip if Rapid already present and list non-empty (heuristic to avoid extra work) but still allow generic missing towers.
+            while (_lateDiscoveryAttempts < lateDiscoveryMaxAttempts)
+            {
+                yield return new WaitForSeconds(lateDiscoveryInterval);
+                _lateDiscoveryAttempts++;
+
+                var before = unlockedTowers.Count;
+                var loaded = Resources.LoadAll<TowerData>("TowerData");
+                int newlyAdded = 0;
+                if (loaded != null)
+                {
+                    for (int i = 0; i < loaded.Length; i++)
+                    {
+                        var td = loaded[i]; if (td == null) continue;
+                        if (AddTowerInternal(td)) newlyAdded++;
+                    }
+                }
+                if (newlyAdded > 0)
+                {
+                    DeduplicateAndSort();
+                    if (verboseLateDiscoveryLogging)
+                        Debug.Log($"[TowerManager] LateDiscovery attempt {_lateDiscoveryAttempts}: added {newlyAdded} new tower(s). Total={unlockedTowers.Count}");
+                    FireTowersChanged();
+                }
+                else if (verboseLateDiscoveryLogging)
+                {
+                    Debug.Log($"[TowerManager] LateDiscovery attempt {_lateDiscoveryAttempts}: no new towers (count={unlockedTowers.Count}).");
+                }
+
+                // Early exit if we have at least 2 towers and one appears to be Rapid (avoid unnecessary scans)
+                if (UnlockedContainsRapid() && unlockedTowers.Count >= 2)
+                {
+                    if (verboseLateDiscoveryLogging)
+                        Debug.Log("[TowerManager] LateDiscovery early success (Rapid present). Ending retries.");
+                    yield break;
+                }
+            }
+            if (verboseLateDiscoveryLogging)
+                Debug.Log("[TowerManager] LateDiscovery attempts exhausted.");
+        }
+
+        private bool UnlockedContainsRapid()
+        {
+            if (unlockedTowers == null) return false;
+            for (int i = 0; i < unlockedTowers.Count; i++)
+            {
+                var td = unlockedTowers[i];
+                if (td != null && !string.IsNullOrEmpty(td.DisplayName) && td.DisplayName.ToLower().Contains("rapid")) return true;
+            }
+            return false;
+        }
+        #endregion
+
+        private bool AddTowerInternal(TowerData td)
+        {
+            if (td == null) return false;
+            if (unlockedTowers.Contains(td)) return false;
+            unlockedTowers.Add(td);
+            return true;
+        }
+
+        /// <summary>
+        /// Public manual trigger to rescan Resources/TowerData at runtime (mobile build) with verbose logging.
+        /// Use when a tower (e.g. Rapid) is reported missing in UI. Returns number of newly added assets.
+        /// </summary>
+        public int ForceResourceRescan(bool logDetails = true)
+        {
+            int added = 0;
+            var scan = Resources.LoadAll<TowerData>("TowerData");
+            if (logDetails)
+            {
+                Debug.Log($"[TowerManager][ForceRescan] Resources returned count={(scan!=null?scan.Length:0)} existing={(unlockedTowers!=null?unlockedTowers.Count:0)}");
+            }
+            if (scan != null)
+            {
+                for (int i = 0; i < scan.Length; i++)
+                {
+                    var td = scan[i];
+                    if (td == null) continue;
+                    if (AddTowerInternal(td)) { added++; if (logDetails) Debug.Log($"[TowerManager][ForceRescan] Added {td.DisplayName} (assetName={td.name})"); }
+                    else if (logDetails)
+                    {
+                        Debug.Log($"[TowerManager][ForceRescan] Already had {td.DisplayName} (assetName={td.name})");
+                    }
+                }
+            }
+            if (added > 0)
+            {
+                DeduplicateAndSort();
+                FireTowersChanged();
+                if (logDetails) Debug.Log($"[TowerManager][ForceRescan] Added {added} new tower(s). Now total={unlockedTowers.Count}");
+            }
+            else if (logDetails)
+            {
+                Debug.Log("[TowerManager][ForceRescan] No new towers found.");
+            }
+            return added;
+        }
+
+        private void FireTowersChanged()
+        {
+            try { TowersChanged?.Invoke(); }
+            catch (System.Exception ex)
+            {
+                Debug.LogError("[TowerManager] Exception invoking TowersChanged: " + ex);
+            }
         }
     }
 }

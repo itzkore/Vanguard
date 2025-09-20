@@ -570,7 +570,7 @@ namespace BulletHeavenFortressDefense.Fortress
             var textRT = textGO.GetComponent<RectTransform>();
             textRT.SetParent(btnRT,false); textRT.anchorMin = Vector2.zero; textRT.anchorMax = Vector2.one; textRT.offsetMin = Vector2.zero; textRT.offsetMax = Vector2.zero;
             var txt = textGO.AddComponent<Text>();
-            txt.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            txt.font = BulletHeavenFortressDefense.UI.UIFontProvider.Get();
             txt.text = "Menu"; txt.alignment = TextAnchor.MiddleCenter; txt.color = Color.white; txt.fontSize = 20;
 
             var pause = Object.FindObjectOfType<BulletHeavenFortressDefense.UI.PauseMenu>();

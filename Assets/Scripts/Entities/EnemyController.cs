@@ -156,11 +156,12 @@ namespace BulletHeavenFortressDefense.Entities
             NotifyHealthChanged();
         }
 
-        // Called by WaveManager right after spawning to enforce HP = 2 * rapidLevel1Damage * waveMultiplier
+        // Called by WaveManager right after spawning to enforce HP = RapidBaseHitFactor * rapidLevel1Damage * waveMultiplier
         public void ApplyBalanceOverrides(float rapidLevel1Damage, int waveNumber)
         {
             if (rapidLevel1Damage <= 0f) return;
-            float hp = rapidLevel1Damage * 2f;
+            float baseFactor = Balance.EnemyDynamicBalance.RapidBaseHitFactor; // default 2
+            float hp = rapidLevel1Damage * baseFactor;
             float waveMult = BulletHeavenFortressDefense.Balance.BalanceConfig.GetEnemyHpMultiplierForWave(waveNumber);
             hp *= waveMult;
             _maxHealthOverride = hp;
@@ -177,6 +178,7 @@ namespace BulletHeavenFortressDefense.Entities
 
             _leftClampedThisFrame = false;
 
+            // Timers that should track real world gameplay (not slowed) use raw deltaTime
             if (_spawnGraceTimer > 0f)
             {
                 _spawnGraceTimer -= Time.deltaTime;
@@ -184,7 +186,7 @@ namespace BulletHeavenFortressDefense.Entities
 
             if (_slowTimer > 0f)
             {
-                _slowTimer -= Time.deltaTime;
+                _slowTimer -= Time.deltaTime; // keep slow effect duration independent of enemy pace multiplier
                 if (_slowTimer <= 0f)
                 {
                     _speedMultiplier = 1f;
@@ -230,14 +232,15 @@ namespace BulletHeavenFortressDefense.Entities
                 }
 
                 // Turn _moveDir toward desiredDir with a turn-rate limit
-                float maxRadians = Mathf.Deg2Rad * turnRateDegreesPerSecond * Time.deltaTime;
+                float enemyDelta = EnemyPace.EnemyDeltaTime; // scaled delta for movement & attack cadence
+                float maxRadians = Mathf.Deg2Rad * turnRateDegreesPerSecond * enemyDelta;
                 float deltaAngle = Mathf.Deg2Rad * Mathf.Clamp(Vector2.SignedAngle(_moveDir, desiredDir), -Mathf.Rad2Deg * maxRadians, Mathf.Rad2Deg * maxRadians);
                 _moveDir = (Quaternion.Euler(0f, 0f, deltaAngle * Mathf.Rad2Deg) * _moveDir).normalized;
                 // Ensure we never drift rightwards (prevent bypassing playfield to the right)
                 if (_moveDir.x > -0.05f) _moveDir.x = -0.05f;
                 _moveDir.Normalize();
 
-                var newPos = (Vector3)(_moveDir * speed * Time.deltaTime) + transform.position;
+                var newPos = (Vector3)(_moveDir * speed * enemyDelta) + transform.position;
 
                 // Prevent moving off the left edge of the viewport
                 if (clampLeftToViewport && Camera.main != null)
@@ -288,7 +291,7 @@ namespace BulletHeavenFortressDefense.Entities
                 return;
             }
 
-            _rangedCooldownTimer -= Time.deltaTime;
+            _rangedCooldownTimer -= EnemyPace.EnemyDeltaTime;
             if (_rangedCooldownTimer > 0f)
             {
                 return;
@@ -378,7 +381,7 @@ namespace BulletHeavenFortressDefense.Entities
                 return;
             }
 
-            _meleeCooldownTimer -= Time.deltaTime;
+            _meleeCooldownTimer -= EnemyPace.EnemyDeltaTime;
             if (_meleeCooldownTimer > 0f)
             {
                 return;

@@ -28,6 +28,13 @@ namespace BulletHeavenFortressDefense.Entities
             _poolId = poolId;
             _direction = direction.sqrMagnitude > 0.001f ? direction.normalized : Vector3.right;
             transform.right = _direction;
+
+            // Apply per-tower base projectile speed if provided (>0). This lets designers tune relative speeds
+            // without having to duplicate projectile prefabs. If absent, retain prefab's serialized speed.
+            if (source != null && source.ProjectileSpeedBase > 0f)
+            {
+                speed = source.ProjectileSpeedBase;
+            }
         }
 
         private void Update()

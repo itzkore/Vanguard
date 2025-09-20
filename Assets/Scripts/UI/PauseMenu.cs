@@ -214,7 +214,9 @@ namespace BulletHeavenFortressDefense.UI
             _isPaused = false;
             if (pauseTimeScale)
             {
-                Time.timeScale = _prePauseTimeScale <= 0f ? 1f : _prePauseTimeScale;
+                // Resume to prior timescale (normally 1). Global enemy-only slowdown no longer uses Time.timeScale.
+                float restore = _prePauseTimeScale <= 0f ? (GameManager.HasInstance ? GameManager.Instance.BaseGameSpeed : 1f) : _prePauseTimeScale;
+                Time.timeScale = restore;
             }
             SetVisible(false);
         }
@@ -222,7 +224,11 @@ namespace BulletHeavenFortressDefense.UI
         public void RestartCurrentScene()
         {
             // Keep paused overlay hidden during reload
-            if (pauseTimeScale) Time.timeScale = 1f;
+            if (pauseTimeScale)
+            {
+                // Let GameManager after reload re-apply its base speed
+                Time.timeScale = 1f; // temporary during scene load
+            }
             _isPaused = false;
             SetVisible(false, instant:true);
             // Mark for auto restart so we go straight back into a run (shop phase) after reload instead of showing main menu.
@@ -234,7 +240,10 @@ namespace BulletHeavenFortressDefense.UI
 
         public void GoToMainMenu()
         {
-            if (pauseTimeScale) Time.timeScale = 1f;
+            if (pauseTimeScale)
+            {
+                Time.timeScale = 1f; // GameManager.ReturnToMenu will apply base speed after state change / reload
+            }
             _isPaused = false;
             SetVisible(false, instant:true);
             // Delegate to GameManager so we respect its loadMainMenuScene toggle & overlay logic.
@@ -369,7 +378,7 @@ namespace BulletHeavenFortressDefense.UI
             var labelGO = new GameObject("Label", typeof(Text));
             labelGO.transform.SetParent(btnGO.transform, false);
             var lbl = labelGO.GetComponent<Text>();
-            lbl.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            lbl.font = BulletHeavenFortressDefense.UI.UIFontProvider.Get();
             lbl.alignment = TextAnchor.MiddleCenter;
             lbl.color = Color.white;
             lbl.text = topRightButtonText;
@@ -413,7 +422,7 @@ namespace BulletHeavenFortressDefense.UI
             var labelGO = new GameObject("Label", typeof(Text));
             labelGO.transform.SetParent(go.transform, false);
             var lbl = labelGO.GetComponent<Text>();
-            lbl.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            lbl.font = BulletHeavenFortressDefense.UI.UIFontProvider.Get();
             lbl.alignment = TextAnchor.MiddleCenter;
             lbl.color = Color.white;
             lbl.text = text;

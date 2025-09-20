@@ -74,7 +74,7 @@ namespace BulletHeavenFortressDefense.UI
             rootGO.AddComponent<GraphicRaycaster>();
             canvas.sortingOrder = 1000; // ensure above HUD
 
-            var font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            var font = BulletHeavenFortressDefense.UI.UIFontProvider.Get();
 
             // Silver background covering the whole screen
             var bgGO = new GameObject("Background", typeof(RectTransform));
@@ -85,8 +85,24 @@ namespace BulletHeavenFortressDefense.UI
             bgRT.offsetMin = Vector2.zero;
             bgRT.offsetMax = Vector2.zero;
             background = bgGO.AddComponent<Image>();
-            background.color = new Color(0.78f, 0.78f, 0.82f, 1f); // soft silver
+            // If a user imported bgmenu.png, try to auto-load it (Assets/Art/bgmenu.png). Put it under Resources/Art for auto Resources.Load.
+            var tex = Resources.Load<Sprite>("Art/bgmenu");
+            if (tex != null)
+            {
+                background.sprite = tex;
+                background.color = Color.white;
+            }
+            else
+            {
+                background.color = new Color(0.78f, 0.78f, 0.82f, 1f); // soft fallback
+            }
             background.raycastTarget = true; // block clicks to the game field
+            // Add FX component (creates smoke / flashes / glitch overlays)
+            if (bgGO.GetComponent<MainMenuBackgroundFX>() == null)
+            {
+                var fx = bgGO.AddComponent<MainMenuBackgroundFX>();
+                // Leave default serialized settings; user can tweak in inspector.
+            }
 
             // Title
             var titleGO = new GameObject("Title", typeof(RectTransform));

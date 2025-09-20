@@ -141,8 +141,8 @@ GameObject:
   - component: {fileID: 330902685}
   - component: {fileID: 330902686}
   - component: {fileID: 330902688}
-  - component: {fileID: 330902689}
   - component: {fileID: 330902690}
+  - component: {fileID: 330902691}
   m_Layer: 0
   m_Name: GameRoot
   m_TagString: Untagged
@@ -236,7 +236,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   unlockedTowers:
-  - {fileID: 11400000, guid: a552ab6d2194fa94082fe7b18e13ccd1, type: 2}
+  - {fileID: 11400000, guid: 8a3f68e5e9a2ec64ca2f254c8a075880, type: 2}
   - {fileID: 11400000, guid: 0460350679a8e084ab0ba69a5b1230d1, type: 2}
   - {fileID: 11400000, guid: 815aff78b239251448f7f43c5a3172b8, type: 2}
   - {fileID: 11400000, guid: a552ab6d2194fa94082fe7b18e13ccd1, type: 2}
@@ -246,6 +246,9 @@ MonoBehaviour:
     m_Bits: 0
   placementRadius: 0.45
   towerSortingOrder: 5
+  lateDiscoveryMaxAttempts: 6
+  lateDiscoveryInterval: 0.75
+  verboseLateDiscoveryLogging: 1
 --- !u!114 &330902682
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -263,6 +266,9 @@ MonoBehaviour:
   onRunEnded: {fileID: 0}
   loadMainMenuScene: 0
   mainMenuSceneName: MainMenu
+  forceSceneReloadOnReturnToMenu: 1
+  bootSceneName: 
+  baseGameSpeed: 0.5
 --- !u!4 &330902683
 Transform:
   m_ObjectHideFlags: 0
@@ -339,21 +345,6 @@ MonoBehaviour:
     prefab: {fileID: 8269017022640902989, guid: 6b4756aa626445343b91d40bb136a6c1, type: 3}
     size: 40
     expandable: 1
---- !u!114 &330902689
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 330902674}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: ced9b6dc7acf404c811f331f9c25e335, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  runOnStart: 1
-  referenceResolution: {x: 1920, y: 1080}
-  fontSize: 36
 --- !u!114 &330902690
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -385,6 +376,34 @@ MonoBehaviour:
   minEnemySpawnX: -9999
   forceRightEdgeColumn: 1
   rightEdgeRandomInsetMax: 0.2
+  progressiveLargeWaveSpawning: 1
+  progressiveSpawnThreshold: 60
+  maxEnemySpawnsPerFrame: 20
+  throttleOnlyWhenNoInterval: 1
+  verboseProgressiveLogs: 0
+--- !u!114 &330902691
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 330902674}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ced9b6dc7acf404c811f331f9c25e335, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  runOnStart: 1
+  referenceResolution: {x: 1920, y: 1080}
+  fontSize: 36
+  manualScaleMultiplier: 1
+  minAutoScale: 1
+  maxAutoScale: 2.2
+  logHudScale: 0
+  usePercentageScaling: 1
+  baselineResolution: {x: 800, y: 480}
+  dynamicRescale: 1
+  applySafeArea: 1
 --- !u!1 &791167535
 GameObject:
   m_ObjectHideFlags: 0
@@ -511,6 +530,8 @@ GameObject:
   - component: {fileID: 1026355281}
   - component: {fileID: 1026355280}
   - component: {fileID: 1026355279}
+  - component: {fileID: 1026355283}
+  - component: {fileID: 1026355282}
   m_Layer: 0
   m_Name: Main Camera
   m_TagString: MainCamera
@@ -536,7 +557,7 @@ Camera:
   m_Enabled: 1
   serializedVersion: 2
   m_ClearFlags: 2
-  m_BackGroundColor: {r: 0.19215687, g: 0.3019608, b: 0.4745098, a: 0}
+  m_BackGroundColor: {r: 0.169, g: 0.129, b: 0.098, a: 1}
   m_projectionMatrixMode: 1
   m_GateFitMode: 2
   m_FOVAxisMode: 0
@@ -584,6 +605,50 @@ Transform:
   m_Father: {fileID: 0}
   m_RootOrder: 0
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1026355282
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1026355278}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 21716e69f58b8294c8a5222ecac5fe6b, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  targetCamera: {fileID: 0}
+  minOrthoSize: 2.5
+  maxOrthoSize: 8
+  boundsMinX: 0
+  boundsMaxX: -1
+  boundsMinY: 0
+  boundsMaxY: -1
+  innerPadding: 0.25
+  wheelZoomSpeed: 0.75
+  pinchZoomSpeed: 0.01
+  blockZoomWhenPointerOverUI: 1
+  smoothing: 12
+  enablePanning: 1
+  blockPanningWhenPointerOverUI: 0
+  panSpeedPerPixel: 1
+  panSmoothing: 18
+--- !u!114 &1026355283
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1026355278}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 56666c5a40171f54783dd416a44f42bf, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  m_EventMask:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  m_MaxRayIntersections: 0
 --- !u!1 &1047173759
 GameObject:
   m_ObjectHideFlags: 0

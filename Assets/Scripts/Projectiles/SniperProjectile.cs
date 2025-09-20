@@ -40,10 +40,21 @@ namespace BulletHeavenFortressDefense.Projectiles
             _initialized = true;
             transform.right = _direction; // orient sprite/mesh
 
-            // If TowerData supplies an override speed, apply it
-            if (data != null && data.SniperProjectileSpeed > 0f)
+            // Apply speed logic hierarchy:
+            // 1. Explicit sniper override (SniperProjectileSpeed) if >0.
+            // 2. Otherwise use per-tower ProjectileSpeedBase (if >0) multiplied by 5 (sniper identity: very fast).
+            // 3. Otherwise fallback to prefab serialized speed * 5 (so snipers always feel distinctly faster than base projectiles).
+            if (data != null)
             {
-                speed = data.SniperProjectileSpeed;
+                if (data.SniperProjectileSpeed > 0f)
+                {
+                    speed = data.SniperProjectileSpeed;
+                }
+                else
+                {
+                    float baseline = data.ProjectileSpeedBase > 0f ? data.ProjectileSpeedBase : speed;
+                    speed = baseline * 5f; // enforce 5x expectation when no explicit override provided
+                }
             }
 
             // Compute final damage snapshot (sniper multipliers already applied in TowerBehaviour when calling Launch)

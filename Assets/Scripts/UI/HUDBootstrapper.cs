@@ -12,39 +12,206 @@ namespace BulletHeavenFortressDefense.UI
         [SerializeField] private bool runOnStart = true;
         [SerializeField] private Vector2 referenceResolution = new Vector2(1920f, 1080f);
         [SerializeField] private int fontSize = 36;
+    [Header("Adaptive HUD Scale")] 
+    [SerializeField, Tooltip("Extra manual multiplier applied to automatically computed HUD scale.")] private float manualScaleMultiplier = 1f;
+    [SerializeField, Tooltip("Minimum automatic scale (height-based) for large mobile resolutions.")] private float minAutoScale = 1f;
+    [SerializeField, Tooltip("Maximum automatic scale clamp.")] private float maxAutoScale = 2.2f;
+    [SerializeField, Tooltip("Log computed HUD scale values.")] private bool logHudScale = false;
+    [Header("Percentage Scaling (Landscape)")]
+    [SerializeField, Tooltip("Use percentage-of-screen scaling anchored to baselineResolution for landscape. Overrides legacy height-based scaling when true.")] private bool usePercentageScaling = true;
+    [SerializeField, Tooltip("Baseline landscape resolution the current HUD layout was tuned for.")] private Vector2 baselineResolution = new Vector2(800f, 480f);
+    [SerializeField, Tooltip("Reapply scaling live if resolution/orientation changes.")] private bool dynamicRescale = true;
+
+    private float _uiScale = 1f; // legacy uniform scale (still used for fonts / generic sizing)
+    private float _uiScaleX = 1f; // percentage scale along width relative to baseline
+    private float _uiScaleY = 1f; // percentage scale along height relative to baseline
+    private Rect _safeArea = new Rect(0,0,0,0);
+    private Vector2 _safeInsetTL = Vector2.zero; // top,left
+    private Vector2 _safeInsetBR = Vector2.zero; // bottom,right
+    [SerializeField, Tooltip("Apply mobile safe area padding for notches / selfie camera.")] private bool applySafeArea = true;
 
         private bool _initialized;
+
+        private int _lastW = -1, _lastH = -1;
 
         private void Start()
         {
             if (runOnStart)
             {
-                EnsureHud();
+                // Compute scale BEFORE constructing HUD so created elements use scaled sizes.
                 ApplyAdaptiveHudScale();
+                ComputeSafeArea();
+                EnsureHud();
+                ScaleHudExisting();
+                EnsureProjectileSanityChecker();
+                _lastW = Screen.width; _lastH = Screen.height;
+            }
+        }
+
+        private void Update()
+        {
+            if (!dynamicRescale || !_initialized) return;
+            if (Screen.width != _lastW || Screen.height != _lastH)
+            {
+                if (Screen.width < Screen.height) // ignore portrait; requirement: only landscape
+                {
+                    _lastW = Screen.width; _lastH = Screen.height; // update but do nothing
+                    return;
+                }
+                if (logHudScale) Debug.Log("[HUDBootstrapper] Resolution/orientation change detected -> rescale");
+                ApplyAdaptiveHudScale();
+                ComputeSafeArea();
+                ScaleHudExisting();
+                _lastW = Screen.width; _lastH = Screen.height;
             }
         }
 
         private void ApplyAdaptiveHudScale()
         {
-            // Dynamically scale fontSize & referenceResolution for very large or ultrawide/tall screens to avoid tiny HUD
-            var width = Screen.width; var height = Screen.height;
-            float aspect = (float)width / height;
-            // Base values
-            int baseFont = fontSize;
-            Vector2 baseRef = referenceResolution;
-
-            // Scale factor: if resolution height > 1080 scale fonts proportionally but clamp so it doesn't get absurdly large
-            float heightScale = Mathf.Clamp(height / 1080f, 1f, 1.8f);
-
-            // If very tall ( > 19.5:9 ~ 2.16 ) we increase UI size a bit more so it stays readable
-            if (aspect < 1.9f) // more square or tall (mobile portrait-like when user rotates?)
+            var width = Screen.width; var height = Screen.height; float aspect = (float)width / height;
+            if (usePercentageScaling && width >= height)
             {
-                heightScale *= 1.05f;
+                _uiScaleX = Mathf.Max(0.01f, width / Mathf.Max(1f, baselineResolution.x));
+                _uiScaleY = Mathf.Max(0.01f, height / Mathf.Max(1f, baselineResolution.y));
+                _uiScale = _uiScaleY * Mathf.Max(0.1f, manualScaleMultiplier); // vertical drives font size
+                fontSize = Mathf.RoundToInt(36f * _uiScale); // 36 baseline
+                if (logHudScale) Debug.Log($"[HUDBootstrapper] Percentage HUD scale Screen={width}x{height} base={baselineResolution} scaleX={_uiScaleX:F2} scaleY={_uiScaleY:F2} fontSize={fontSize}");
             }
+            else
+            {
+                // Legacy fallback
+                float heightScale = Mathf.Clamp(height / 1080f, 1f, 1.8f);
+                if (aspect < 1.9f) heightScale *= 1.05f;
+                _uiScale = Mathf.Clamp(height / 1080f, minAutoScale, maxAutoScale) * Mathf.Max(0.1f, manualScaleMultiplier);
+                fontSize = Mathf.RoundToInt(36f * heightScale * _uiScale);
+                _uiScaleX = _uiScaleY = _uiScale;
+                if (logHudScale) Debug.Log($"[HUDBootstrapper] Legacy adaptive scale Screen={width}x{height} aspect={aspect:F3} fontSize={fontSize} uiScale={_uiScale:F2}");
+            }
+            // Publish static for other HUD systems (e.g. WallsHealthHUD)
+            PublishedScaleX = _uiScaleX;
+            PublishedScaleY = _uiScaleY;
+            PublishedFontBase = fontSize;
+            PublishedScaleVersion++;
+        }
 
-            fontSize = Mathf.RoundToInt(baseFont * heightScale);
-            referenceResolution = new Vector2(baseRef.x, baseRef.y * Mathf.Clamp(heightScale,1f,1.4f));
-            Debug.Log($"[HUDBootstrapper] Adaptive HUD scale applied. Screen={width}x{height} aspect={aspect:F3} fontSize={fontSize} refRes={referenceResolution}");
+        private void ComputeSafeArea()
+        {
+            if (!applySafeArea) return;
+#if UNITY_ANDROID || UNITY_IOS
+            _safeArea = Screen.safeArea;
+#else
+            _safeArea = new Rect(0,0,Screen.width,Screen.height);
+#endif
+            // Convert to pixel insets
+            float left = _safeArea.xMin;
+            float right = Screen.width - _safeArea.xMax;
+            float bottom = _safeArea.yMin;
+            float top = Screen.height - _safeArea.yMax;
+            _safeInsetTL = new Vector2(left, top);
+            _safeInsetBR = new Vector2(right, bottom);
+            if (logHudScale)
+            {
+                Debug.Log($"[HUDBootstrapper] SafeArea screen={Screen.width}x{Screen.height} rect={_safeArea} insets L={left} R={right} T={top} B={bottom}");
+            }
+        }
+
+    // --- Scaling helpers ---
+    private float SX(float v) => v * _uiScaleX;               // width-based scale
+    private float SY(float v) => v * _uiScaleY;               // height-based scale
+    private float S(float v) => v * _uiScaleY; // maintain existing calls as height-based for backward compatibility
+    private Vector2 SV(float x, float y) => new Vector2(SX(x), SY(y));
+    private int F(float baseFactor) => Mathf.RoundToInt(fontSize * baseFactor); // fontSize already scaled
+
+        // Baseline numeric constants from 800x480 reference layout
+        private const float BASE_BUILD_WIDTH = 210f;
+        private const float BASE_BUILD_HEIGHT = 36f;
+        private const float BASE_BUTTON_SMALL_W = 90f;
+        private const float BASE_BUTTON_SMALL_H = 32f;
+        private const float BASE_MENU_BTN_W = 100f;
+        private const float BASE_MENU_BTN_H = 36f;
+        private const float BASE_WAVE_OFFSET_Y = -32f;
+        private const float BASE_STATUS_BAR_H = 22f;
+        private const float BASE_MARGIN = 32f;
+
+        private void ScaleHudExisting()
+        {
+            if (!_initialized) return; // only after creation
+            if (Screen.width < Screen.height) return; // ignore portrait
+            // Wave label offset
+            var hudCanvas = GameObject.Find("HUDCanvas");
+            if (hudCanvas != null)
+            {
+                var wave = hudCanvas.transform.Find("WaveText") as RectTransform;
+                if (wave != null)
+                {
+                    wave.anchoredPosition = SV(0f, BASE_WAVE_OFFSET_Y);
+                    var waveTxt = wave.GetComponent<Text>();
+                    if (waveTxt != null)
+                    {
+                        waveTxt.fontSize = fontSize; // main headline size
+                    }
+                }
+            }
+            // Build controls
+            var buildPanel = GameObject.Find("BuildControls");
+            if (buildPanel != null)
+            {
+                var rect = buildPanel.GetComponent<RectTransform>();
+                var safeLL = applySafeArea ? new Vector2(_safeInsetTL.x, _safeInsetBR.y) : Vector2.zero;
+                rect.anchoredPosition = new Vector2(SX(BASE_MARGIN) + safeLL.x, SY(BASE_MARGIN) + safeLL.y);
+                rect.sizeDelta = new Vector2(SX(BASE_BUILD_WIDTH), SY(BASE_BUILD_HEIGHT));
+                // Children: Turrets button label + Euro label
+                var texts = buildPanel.GetComponentsInChildren<Text>(true);
+                for (int i = 0; i < texts.Length; i++)
+                {
+                    var t = texts[i];
+                    if (t == null) continue;
+                    // Use small button scale factor (0.45 baseline)
+                    t.fontSize = Mathf.RoundToInt(fontSize * 0.45f);
+                }
+            }
+            // Run controls
+            var runPanel = GameObject.Find("RunControls");
+            if (runPanel != null)
+            {
+                var rect = runPanel.GetComponent<RectTransform>();
+                rect.anchoredPosition = new Vector2(-SX(BASE_MARGIN), SY(88f));
+                var btnTxt = runPanel.GetComponentInChildren<Text>(true);
+                if (btnTxt != null)
+                {
+                    btnTxt.fontSize = Mathf.RoundToInt(fontSize * 0.45f);
+                }
+            }
+            // Top right menu button
+            var menuBtn = GameObject.Find("TopRightMenuButton");
+            if (menuBtn != null)
+            {
+                var rt = menuBtn.GetComponent<RectTransform>();
+                float safeRight = applySafeArea ? _safeInsetBR.x : 0f;
+                float safeTop = applySafeArea ? _safeInsetTL.y : 0f;
+                rt.anchoredPosition = new Vector2(-SX(12f) - safeRight, -SY(12f) - safeTop);
+                rt.sizeDelta = new Vector2(SX(BASE_MENU_BTN_W), SY(BASE_MENU_BTN_H));
+                var txt = rt.GetComponentInChildren<Text>();
+                if (txt != null) txt.fontSize = Mathf.RoundToInt(fontSize * 0.45f);
+            }
+            // Status bar
+            var status = GameObject.Find("StatusPanel");
+            if (status != null)
+            {
+                var rt = status.GetComponent<RectTransform>();
+                if (rt != null) rt.sizeDelta = new Vector2(rt.sizeDelta.x, SY(BASE_STATUS_BAR_H));
+                var labels = status.GetComponentsInChildren<Text>(true);
+                for (int i = 0; i < labels.Length; i++)
+                {
+                    var lab = labels[i];
+                    if (lab == null) continue;
+                    // Status labels small factor 0.28 baseline
+                    if (lab.name == "StatusLabel" || lab.transform.parent == status.transform)
+                    {
+                        lab.fontSize = Mathf.RoundToInt(fontSize * 0.28f);
+                    }
+                }
+            }
         }
 
         [ContextMenu("Ensure HUD")]
@@ -71,6 +238,16 @@ namespace BulletHeavenFortressDefense.UI
             CreateHud();
             EnsureOverlays();
             _initialized = true;
+        }
+
+        private void EnsureProjectileSanityChecker()
+        {
+            // Add the runtime projectile prefab validator if not already present (helps catch missing Rapid script).
+            if (FindObjectOfType<BulletHeavenFortressDefense.Diagnostics.ProjectilePrefabSanityCheck>() == null)
+            {
+                var go = new GameObject("~ProjectileSanityChecker");
+                go.AddComponent<BulletHeavenFortressDefense.Diagnostics.ProjectilePrefabSanityCheck>();
+            }
         }
 
         private void EnsureBackground()
@@ -148,7 +325,7 @@ namespace BulletHeavenFortressDefense.UI
                 DestroyImmediate(oldStatusCanvas);
             }
 
-            var font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            var font = UIFontProvider.Get();
             var energyLabel = CreateBuildMenu(canvas.transform, font);
             var waveLabel = EnsureWaveLabel(canvas.transform, font);
             CreateStatusPanel(canvas.transform, font, out var baseLabel, out var phaseLabel, out var timerLabel, out var enemiesLabel, out var killsLabel);
@@ -183,7 +360,7 @@ namespace BulletHeavenFortressDefense.UI
                 cam.gameObject.AddComponent<Physics2DRaycaster>();
             }
 
-            var font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            var font = UIFontProvider.Get();
             var energyLabel = CreateBuildMenu(canvas.transform, font);
             var waveLabel = EnsureWaveLabel(canvas.transform, font);
             CreateStatusPanel(canvas.transform, font, out var baseLabel, out var phaseLabel, out var timerLabel, out var enemiesLabel, out var killsLabel);
@@ -248,7 +425,7 @@ namespace BulletHeavenFortressDefense.UI
 
             if (waveLabel == null)
             {
-                waveLabel = CreateLabel(canvasRoot, "WaveText", new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -32f), font, "Wave 0", TextAnchor.MiddleCenter);
+                waveLabel = CreateLabel(canvasRoot, "WaveText", new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), SV(0f, -32f), font, "Wave 0", TextAnchor.MiddleCenter);
             }
 
             return waveLabel;
@@ -283,7 +460,7 @@ namespace BulletHeavenFortressDefense.UI
             rect.anchorMax = new Vector2(1f, 0f);
             rect.pivot = new Vector2(0.5f, 0f);
             rect.anchoredPosition = new Vector2(0f, 0f); // flush with absolute bottom
-            rect.sizeDelta = new Vector2(0f, 22f); // slimmer height (about half)
+            rect.sizeDelta = new Vector2(0f, SY(BASE_STATUS_BAR_H));
 
             var bg = panelGO.AddComponent<Image>();
             bg.color = new Color(0f,0f,0f,0.35f); // subtle translucent
@@ -530,8 +707,10 @@ namespace BulletHeavenFortressDefense.UI
             panelRect.anchorMin = new Vector2(0f, 0f);
             panelRect.anchorMax = new Vector2(0f, 0f);
             panelRect.pivot = new Vector2(0f, 0f);
-            panelRect.anchoredPosition = new Vector2(32f, 32f);
-            panelRect.sizeDelta = new Vector2(210f, 36f); // compact width for two small cells
+            // Lower-left build controls: push in from left/bottom safe area
+            var safeLL = applySafeArea ? new Vector2(_safeInsetTL.x, _safeInsetBR.y) : Vector2.zero;
+            panelRect.anchoredPosition = new Vector2(SX(BASE_MARGIN) + safeLL.x, SY(BASE_MARGIN) + safeLL.y);
+            panelRect.sizeDelta = new Vector2(SX(BASE_BUILD_WIDTH), SY(BASE_BUILD_HEIGHT));
 
             var hl = panelGO.AddComponent<HorizontalLayoutGroup>();
             hl.padding = new RectOffset(0, 0, 0, 0);
@@ -549,13 +728,13 @@ namespace BulletHeavenFortressDefense.UI
             var btnLE = button.gameObject.GetComponent<LayoutElement>();
             if (btnLE != null)
             {
-                btnLE.preferredWidth = 90f;
-                btnLE.minWidth = 90f;
-                btnLE.preferredHeight = 32f;
-                btnLE.minHeight = 32f;
+                btnLE.preferredWidth = SX(BASE_BUTTON_SMALL_W);
+                btnLE.minWidth = SX(BASE_BUTTON_SMALL_W);
+                btnLE.preferredHeight = SY(BASE_BUTTON_SMALL_H);
+                btnLE.minHeight = SY(BASE_BUTTON_SMALL_H);
             }
             var btnRect = button.GetComponent<RectTransform>();
-            btnRect.sizeDelta = new Vector2(90f, 32f);
+            btnRect.sizeDelta = new Vector2(SX(BASE_BUTTON_SMALL_W), SY(BASE_BUTTON_SMALL_H));
             var btnLabel = button.GetComponentInChildren<Text>();
             if (btnLabel != null)
             {
@@ -585,13 +764,13 @@ namespace BulletHeavenFortressDefense.UI
             euroGO.layer = LayerMask.NameToLayer("UI");
             euroGO.transform.SetParent(panelGO.transform, false);
             var euroRect = euroGO.GetComponent<RectTransform>();
-            euroRect.sizeDelta = new Vector2(90f, 32f);
+            euroRect.sizeDelta = new Vector2(SX(BASE_BUTTON_SMALL_W), SY(BASE_BUTTON_SMALL_H));
 
             var euroLE = euroGO.AddComponent<LayoutElement>();
-            euroLE.preferredWidth = 90f;
-            euroLE.minWidth = 90f;
-            euroLE.preferredHeight = 32f;
-            euroLE.minHeight = 32f;
+            euroLE.preferredWidth = SX(BASE_BUTTON_SMALL_W);
+            euroLE.minWidth = SX(BASE_BUTTON_SMALL_W);
+            euroLE.preferredHeight = SY(BASE_BUTTON_SMALL_H);
+            euroLE.minHeight = SY(BASE_BUTTON_SMALL_H);
 
             var euroBg = euroGO.AddComponent<Image>();
             euroBg.color = new Color(0f,0f,0f,0.95f);
@@ -631,7 +810,7 @@ namespace BulletHeavenFortressDefense.UI
             rect.anchorMax = new Vector2(1f, 0f);
             rect.pivot = new Vector2(1f, 0f);
             // Raise controls upward to leave space for bottom status bar (approx 40px + 8px gap)
-            rect.anchoredPosition = new Vector2(-32f, 88f);
+            rect.anchoredPosition = new Vector2(-SX(BASE_MARGIN), SY(88f));
             rect.sizeDelta = new Vector2(110f, 40f);
 
             var image = panelGO.AddComponent<Image>();
@@ -649,9 +828,9 @@ namespace BulletHeavenFortressDefense.UI
             var sbLE = startButton.GetComponent<LayoutElement>();
             if (sbLE != null)
             {
-                sbLE.preferredWidth = 90f; sbLE.minWidth = 90f; sbLE.preferredHeight = 32f; sbLE.minHeight = 32f;
+                sbLE.preferredWidth = SX(BASE_BUTTON_SMALL_W); sbLE.minWidth = SX(BASE_BUTTON_SMALL_W); sbLE.preferredHeight = SY(BASE_BUTTON_SMALL_H); sbLE.minHeight = SY(BASE_BUTTON_SMALL_H);
             }
-            startButton.GetComponent<RectTransform>().sizeDelta = new Vector2(90f,32f);
+            startButton.GetComponent<RectTransform>().sizeDelta = new Vector2(SX(BASE_BUTTON_SMALL_W), SY(BASE_BUTTON_SMALL_H));
             var sbLabel = startButton.GetComponentInChildren<Text>();
             if (sbLabel != null) sbLabel.fontSize = Mathf.RoundToInt(fontSize * 0.45f);
 
@@ -670,8 +849,11 @@ namespace BulletHeavenFortressDefense.UI
             rt.anchorMin = new Vector2(1f,1f);
             rt.anchorMax = new Vector2(1f,1f);
             rt.pivot = new Vector2(1f,1f);
-            rt.anchoredPosition = new Vector2(-12f,-12f);
-            rt.sizeDelta = new Vector2(100f,36f);
+            // Top-right button: apply safe area top/right inset
+            float safeRight = applySafeArea ? _safeInsetBR.x : 0f; // right inset stored in BR.x
+            float safeTop = applySafeArea ? _safeInsetTL.y : 0f;  // top inset stored in TL.y
+            rt.anchoredPosition = new Vector2(-SX(12f) - safeRight, -SY(12f) - safeTop);
+            rt.sizeDelta = new Vector2(SX(BASE_MENU_BTN_W), SY(BASE_MENU_BTN_H));
 
             var img = go.AddComponent<Image>();
             img.color = new Color(0f,0f,0f,0.95f);
@@ -709,16 +891,16 @@ namespace BulletHeavenFortressDefense.UI
             buttonGO.layer = LayerMask.NameToLayer("UI");
             var rect = buttonGO.GetComponent<RectTransform>();
             rect.SetParent(parent, false);
-            rect.sizeDelta = small ? new Vector2(90f,32f) : new Vector2(140f,52f);
+            rect.sizeDelta = small ? new Vector2(SX(BASE_BUTTON_SMALL_W), SY(BASE_BUTTON_SMALL_H)) : new Vector2(SX(140f), SY(52f));
 
             var layoutElement = buttonGO.AddComponent<LayoutElement>();
             if (small)
             {
-                layoutElement.preferredWidth = 90f; layoutElement.minWidth = 90f; layoutElement.preferredHeight = 32f; layoutElement.minHeight = 32f;
+                layoutElement.preferredWidth = SX(BASE_BUTTON_SMALL_W); layoutElement.minWidth = SX(BASE_BUTTON_SMALL_W); layoutElement.preferredHeight = SY(BASE_BUTTON_SMALL_H); layoutElement.minHeight = SY(BASE_BUTTON_SMALL_H);
             }
             else
             {
-                layoutElement.preferredWidth = 140f; layoutElement.minWidth = 120f; layoutElement.preferredHeight = 52f; layoutElement.minHeight = 48f;
+                layoutElement.preferredWidth = SX(140f); layoutElement.minWidth = SX(120f); layoutElement.preferredHeight = SY(52f); layoutElement.minHeight = SY(48f);
             }
 
             var image = buttonGO.AddComponent<Image>();
@@ -740,7 +922,7 @@ namespace BulletHeavenFortressDefense.UI
             label.alignment = TextAnchor.MiddleCenter;
             label.color = Color.white;
             label.font = font;
-            label.fontSize = Mathf.RoundToInt(fontSize * (small ? 0.45f : 0.65f));
+            label.fontSize = F(small ? 0.45f : 0.65f);
             // Outline to mimic wall HUD border color
             var outline = buttonGO.AddComponent<Outline>();
             outline.effectColor = new Color(0.95f,0.95f,0.95f,0.9f);
@@ -1015,7 +1197,7 @@ namespace BulletHeavenFortressDefense.UI
 
             RemoveChildrenWith<RunControlPanel>(hudRoot);
 
-            var font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            var font = UIFontProvider.Get();
             CreateRunControls(hudRoot, font);
         }
 
@@ -1043,5 +1225,11 @@ namespace BulletHeavenFortressDefense.UI
 
         private class StatusPanelMarker : MonoBehaviour { }
         private class BuildOpenButtonMarker : MonoBehaviour { }
+
+        // --- Public static scale access for other HUD components ---
+        public static float PublishedScaleX { get; private set; } = 1f;
+        public static float PublishedScaleY { get; private set; } = 1f;
+        public static int PublishedFontBase { get; private set; } = 36;
+        public static int PublishedScaleVersion { get; private set; } = 0; // increments when scale recalculated
     }
 }

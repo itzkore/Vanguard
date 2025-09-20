@@ -34,12 +34,19 @@ namespace BulletHeavenFortressDefense.Fortress
             _row = row;
             _column = column;
             _available = owner != null && owner.IsAlive;
-            FortressManager.Instance?.RegisterMount(this);
+            if (FortressManager.HasInstance)
+            {
+                FortressManager.Instance.RegisterMount(this);
+            }
         }
 
         private void OnDestroy()
         {
-            FortressManager.Instance?.UnregisterMount(this);
+            // Avoid noisy error spam when quitting play mode / scene reload where manager already destroyed.
+            if (FortressManager.HasInstance)
+            {
+                FortressManager.Instance.UnregisterMount(this);
+            }
         }
 
         public bool ContainsPoint(Vector2 worldPoint)

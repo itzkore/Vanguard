@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Collections; // needed for non-generic IEnumerator coroutine signature
 using UnityEngine;
 using UnityEngine.UI;
 using BulletHeavenFortressDefense.Data;
@@ -47,10 +48,22 @@ namespace BulletHeavenFortressDefense.UI
         private void OnEnable()
         {
             Refresh();
+            if (Application.isPlaying)
+            {
+                // Start delayed retries if list is empty – especially for mobile builds where Resources may finish loading slightly later
+                if (_retryRoutine == null)
+                {
+                    _retryRoutine = StartCoroutine(RetryPopulateIfEmpty());
+                }
+            }
             if (EconomySystem.HasInstance)
             {
                 EconomySystem.Instance.EnergyChanged += OnEnergyChanged;
                 OnEnergyChanged(EconomySystem.Instance.CurrentEnergy);
+            }
+            if (TowerManager.HasInstance)
+            {
+                TowerManager.Instance.TowersChanged += OnTowersChanged;
             }
         }
 
@@ -60,10 +73,59 @@ namespace BulletHeavenFortressDefense.UI
             {
                 EconomySystem.Instance.EnergyChanged -= OnEnergyChanged;
             }
+            if (TowerManager.HasInstance)
+            {
+                TowerManager.Instance.TowersChanged -= OnTowersChanged;
+            }
+            if (_retryRoutine != null)
+            {
+                StopCoroutine(_retryRoutine);
+                _retryRoutine = null;
+            }
+        }
+
+        private Coroutine _retryRoutine;
+        private const int MAX_RETRY_ATTEMPTS = 6;
+        private IEnumerator RetryPopulateIfEmpty()
+        {
+            // wait a tiny moment for initial scene boot
+            yield return new WaitForSeconds(0.25f);
+            int attempt = 0;
+            while (attempt < MAX_RETRY_ATTEMPTS)
+            {
+                attempt++;
+                bool hasAny = _spawnedButtons.Count > 0;
+                if (!hasAny && TowerManager.HasInstance)
+                {
+                    var mgr = TowerManager.Instance;
+                    int before = mgr.UnlockedTowers != null ? mgr.UnlockedTowers.Count : -1;
+                    int added = mgr.ForceResourceRescan(logDetails: attempt==1);
+                    if (added > 0 || (mgr.UnlockedTowers!=null && mgr.UnlockedTowers.Count>0))
+                    {
+                        Debug.Log($"[BuildMenu][Retry] Attempt {attempt}: repopulating after rescan (added={added})");
+                        Refresh();
+                        hasAny = _spawnedButtons.Count > 0;
+                    }
+                }
+                if (hasAny)
+                {
+                    if (attempt>1) Debug.Log($"[BuildMenu][Retry] Success after {attempt} attempt(s).");
+                    break;
+                }
+                Debug.Log($"[BuildMenu][Retry] Attempt {attempt} found no towers. Waiting...");
+                yield return new WaitForSeconds(0.6f);
+            }
+            _retryRoutine = null;
         }
 
         public void Refresh()
         {
+            if (_refreshInProgress)
+            {
+                Debug.Log("[BuildMenu] Suppressing nested Refresh call.");
+                return;
+            }
+            _refreshInProgress = true;
             Clear();
 
             // Ensure UI bindings even if Awake hasn't run yet (ordering safety)
@@ -164,6 +226,21 @@ namespace BulletHeavenFortressDefense.UI
                     Icon = icon
                 });
             }
+            _refreshInProgress = false;
+        }
+
+        private bool _refreshInProgress = false;
+
+        private void OnTowersChanged()
+        {
+            // Only auto-refresh if active & enabled (avoid unnecessary instantiations when hidden)
+            if (!isActiveAndEnabled) return;
+            Debug.Log("[BuildMenu] TowersChanged event received; refreshing build menu.");
+            Refresh();
+            if (EconomySystem.HasInstance)
+            {
+                OnEnergyChanged(EconomySystem.Instance.CurrentEnergy);
+            }
         }
 
         private void OnTowerButtonPressed(TowerData tower)
@@ -235,7 +312,7 @@ namespace BulletHeavenFortressDefense.UI
             text.text = message;
             text.alignment = TextAnchor.MiddleCenter;
             text.color = new Color(1f,1f,1f,0.7f);
-            text.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            text.font = BulletHeavenFortressDefense.UI.UIFontProvider.Get();
             text.fontSize = 26;
         }
 
@@ -285,7 +362,7 @@ namespace BulletHeavenFortressDefense.UI
             text.text = "Tower (0)";
             text.alignment = TextAnchor.MiddleLeft;
             text.color = affordableColor;
-            text.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            text.font = BulletHeavenFortressDefense.UI.UIFontProvider.Get();
             text.fontSize = 28;
             text.raycastTarget = false;
 

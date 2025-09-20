@@ -217,7 +217,7 @@ namespace BulletHeavenFortressDefense.UI
             _toastText.text = string.Empty;
             _toastText.alignment = TextAnchor.MiddleCenter;
             _toastText.color = Color.white;
-            _toastText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            _toastText.font = BulletHeavenFortressDefense.UI.UIFontProvider.Get();
             _toastText.resizeTextForBestFit = true;
             _toastText.resizeTextMinSize = 10;
             _toastText.resizeTextMaxSize = 24;

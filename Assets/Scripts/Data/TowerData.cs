@@ -10,6 +10,7 @@ namespace BulletHeavenFortressDefense.Data
         [SerializeField] private GameObject prefab;
         [SerializeField] private GameObject projectilePrefab;
         [SerializeField] private string projectilePoolId;
+        [SerializeField, Tooltip("Base projectile speed (units/sec) for standard Projectile & as baseline for others. 0 or negative = use prefab default.")] private float projectileSpeedBase = 0f;
         [SerializeField] private int buildCost = 10;
         [SerializeField] private float damage = 5f;
         [SerializeField] private float fireRate = 1f;
@@ -60,6 +61,7 @@ namespace BulletHeavenFortressDefense.Data
         public GameObject Prefab => prefab;
         public GameObject ProjectilePrefab => projectilePrefab;
         public string ProjectilePoolId => projectilePoolId;
+    public float ProjectileSpeedBase => projectileSpeedBase; // allow <=0 = unused
         public int BuildCost => buildCost;
         public float Damage => damage;
         public float FireRate => fireRate;

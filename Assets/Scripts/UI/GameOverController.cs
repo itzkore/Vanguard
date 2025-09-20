@@ -100,7 +100,7 @@ namespace BulletHeavenFortressDefense.UI
             scaler.referenceResolution = new Vector2(1920, 1080);
             rootGO.AddComponent<GraphicRaycaster>();
 
-            var font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            var font = BulletHeavenFortressDefense.UI.UIFontProvider.Get();
 
             var panelGO = new GameObject("Panel", typeof(RectTransform));
             var panelRT = panelGO.GetComponent<RectTransform>();

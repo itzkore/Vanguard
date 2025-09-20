@@ -42,6 +42,12 @@ namespace BulletHeavenFortressDefense.Managers
     [SerializeField, Tooltip("Clamp so enemies never spawn with X less than this (prevents appearing inside the fortress area).")] private float minEnemySpawnX = -9999f;
     [SerializeField, Tooltip("If true, ignore horizontal left-shift spacing so all right-edge spawns appear in a vertical column.")] private bool forceRightEdgeColumn = true;
     [SerializeField, Tooltip("Max random inward (left) inset when forcing a column, to avoid perfect overlap. 0 = none.")] private float rightEdgeRandomInsetMax = 0.2f;
+    [Header("Performance / Progressive Spawning")]
+    [SerializeField, Tooltip("Enable throttling of very large spawn bursts to avoid single-frame hitching (notably > ~100 enemies)")] private bool progressiveLargeWaveSpawning = true;
+    [SerializeField, Tooltip("If an individual spawn entry (count) >= this threshold AND progressive spawning enabled, it will be spread across multiple frames.")] private int progressiveSpawnThreshold = 60;
+    [SerializeField, Tooltip("Maximum enemies spawned in a single frame when throttling a large entry.")] private int maxEnemySpawnsPerFrame = 20;
+    [SerializeField, Tooltip("Optional safety cap: even during throttling if spawnInterval > 0 it already yields; so we only throttle zero-interval bursts.")] private bool throttleOnlyWhenNoInterval = true;
+    [SerializeField, Tooltip("Verbose logs for progressive throttling decisions.")] private bool verboseProgressiveLogs = false;
 
         private readonly HashSet<int> _activeWaveEnemyIds = new();
 
@@ -681,15 +687,18 @@ namespace BulletHeavenFortressDefense.Managers
                     continue;
                 }
 
+                bool largeEntry = progressiveLargeWaveSpawning && entry.count >= Mathf.Max(1, progressiveSpawnThreshold);
                 if (entry.spawnAlongRightEdge)
                 {
-                    // Burst spawn: spawn the whole entry in one frame, evenly spaced along the edge.
+                    // Burst spawn path: optionally progressive if very large.
                     int totalPoints = SpawnSystem.Instance.EnsureEdgeSpawnPoints(entry.count);
                     float spacing = Mathf.Max(SpawnSystem.Instance.RightEdgeHorizontalSpacing, 0.01f);
                     if (spacing <= 0.011f)
                     {
                         Debug.LogWarning("[WaveManager] RightEdgeHorizontalSpacing is very small; enemies may appear behind each other. Using minimal spacing.");
                     }
+                    int perFrameBudget = Mathf.Max(1, maxEnemySpawnsPerFrame);
+                    int spawnedThisFrame = 0;
                     for (int j = 0; j < entry.count; j++)
                     {
                         EnemyController enemy = null;
@@ -750,6 +759,18 @@ namespace BulletHeavenFortressDefense.Managers
                             spawned++;
                             enemy.ApplyBalanceOverrides(_rapidBaseDamage, CurrentWaveNumber);
                         }
+
+                        // Progressive yield: only if large entry and either interval is zero OR we ignore interval requirement
+                        if (largeEntry && (!throttleOnlyWhenNoInterval || entry.spawnInterval <= 0f))
+                        {
+                            spawnedThisFrame++;
+                            if (spawnedThisFrame >= perFrameBudget)
+                            {
+                                if (verboseProgressiveLogs) Debug.Log($"[WaveManager][Progressive] Yield frame after {spawnedThisFrame} edge spawns (entry.count={entry.count}).");
+                                spawnedThisFrame = 0;
+                                yield return null; // let frame breathe
+                            }
+                        }
                     }
 
                     // Single wait after the burst
@@ -760,12 +781,18 @@ namespace BulletHeavenFortressDefense.Managers
                     }
                     else
                     {
-                        yield return null;
+                        // Only a single null yield if we were NOT doing progressive yields inside loop
+                        if (!(largeEntry && (!throttleOnlyWhenNoInterval || entry.spawnInterval <= 0f)))
+                        {
+                            yield return null;
+                        }
                     }
                 }
                 else
                 {
                     // Lane-based: preserve per-enemy interval behavior
+                    int perFrameBudget = Mathf.Max(1, maxEnemySpawnsPerFrame);
+                    int spawnedThisFrame = 0;
                     for (int j = 0; j < entry.count; j++)
                     {
                         EnemyController enemy = null;
@@ -796,11 +823,25 @@ namespace BulletHeavenFortressDefense.Managers
                         float wait = entry.spawnInterval;
                         if (wait > 0f)
                         {
+                            // Normal timed spawning already spreads load; just wait.
                             yield return new WaitForSeconds(wait);
                         }
                         else
                         {
-                            yield return null;
+                            if (largeEntry && (!throttleOnlyWhenNoInterval || wait <= 0f))
+                            {
+                                spawnedThisFrame++;
+                                if (spawnedThisFrame >= perFrameBudget)
+                                {
+                                    if (verboseProgressiveLogs) Debug.Log($"[WaveManager][Progressive] Yield frame after {spawnedThisFrame} lane spawns (entry.count={entry.count}).");
+                                    spawnedThisFrame = 0;
+                                    yield return null;
+                                }
+                            }
+                            else
+                            {
+                                yield return null; // legacy behavior small batches
+                            }
                         }
                     }
                 }

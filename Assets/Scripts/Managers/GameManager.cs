@@ -27,14 +27,36 @@ namespace BulletHeavenFortressDefense.Managers
     [Header("Main Menu Config")] 
     [SerializeField, Tooltip("If true, ReturnToMenu will load a scene instead of just switching state.")] private bool loadMainMenuScene = false;
     [SerializeField, Tooltip("Scene name to load when loadMainMenuScene is true.")] private string mainMenuSceneName = "MainMenu";
+    [SerializeField, Header("Full Reset"), Tooltip("If true and loadMainMenuScene is FALSE, ReturnToMenu will still reload the active scene to ensure a clean reset.")] private bool forceSceneReloadOnReturnToMenu = true;
+    [SerializeField, Tooltip("Optional explicit boot scene name to reload when forceSceneReloadOnReturnToMenu = true. Leave empty to use active scene.")] private string bootSceneName = "";
 
         public GameState CurrentState { get; private set; }
         public event Action<GameState> StateChanged;
+
+    [Header("Game Speed")]
+    [SerializeField, Range(0.1f, 3f), Tooltip("Base gameplay speed factor applied when not paused. Keep at 1 for normal; adjust only if you truly want to scale EVERYTHING (UI animations, projectiles, towers, etc.). Enemy-only slowdown now lives in EnemyPace.SpeedMultiplier.")]
+    private float baseGameSpeed = 1f; // revert to normal speed; enemy pacing handled separately
+        public float BaseGameSpeed => baseGameSpeed;
+
+        /// <summary>
+        /// Applies the configured base game speed to Time.timeScale if not paused.
+        /// </summary>
+        public void ApplyBaseGameSpeed()
+        {
+            // If currently paused (timescale 0) don't override
+            if (Mathf.Approximately(Time.timeScale, 0f)) return;
+            if (!Mathf.Approximately(Time.timeScale, baseGameSpeed))
+            {
+                Time.timeScale = baseGameSpeed;
+            }
+        }
 
         protected override void Awake()
         {
             base.Awake();
             CurrentState = initialState;
+            // Ensure initial speed (Boot state) uses baseGameSpeed
+            ApplyBaseGameSpeed();
         }
 
         private void Start()
@@ -54,8 +76,8 @@ namespace BulletHeavenFortressDefense.Managers
 
         public void StartRun()
         {
-            // Ensure time scale restored when starting a fresh run
-            if (Time.timeScale != 1f) Time.timeScale = 1f;
+            // Ensure time scale restored to base (may have been paused or different state)
+            ApplyBaseGameSpeed();
             BaseCore.Instance?.RestoreFullHealth();
             EconomySystem.Instance?.ResetEnergy();
 
@@ -95,14 +117,32 @@ namespace BulletHeavenFortressDefense.Managers
             if (loadMainMenuScene && !string.IsNullOrEmpty(mainMenuSceneName))
             {
                 if (Time.timeScale != 1f) Time.timeScale = 1f;
+                // Replace immediate restore with base speed AFTER scene load (scene load sets timescale implicitly)
+                PendingAutoRestartRun = false; // never auto-run when going to explicit main menu scene
                 UnityEngine.SceneManagement.SceneManager.LoadScene(mainMenuSceneName);
                 return;
             }
+            // If we want a hard reset even without a dedicated main menu scene, reload current (or boot) scene.
+            if (forceSceneReloadOnReturnToMenu)
+            {
+                if (Time.timeScale != 1f) Time.timeScale = 1f;
+                // Scene reload -> after load Awake() will ApplyBaseGameSpeed
+                PendingAutoRestartRun = false; // ensure no auto-start
+                string sceneToLoad = bootSceneName;
+                if (string.IsNullOrEmpty(sceneToLoad))
+                {
+                    sceneToLoad = UnityEngine.SceneManagement.SceneManager.GetActiveScene().name; // reload same scene to clear runtime state
+                }
+                Debug.Log("[GameManager] ReturnToMenu -> force scene reload: '" + sceneToLoad + "'");
+                UnityEngine.SceneManagement.SceneManager.LoadScene(sceneToLoad);
+                return;
+            }
 
+            // Fallback: soft return (legacy behavior) – switch state & show overlay
             SetState(GameState.MainMenu);
-            if (Time.timeScale != 1f) Time.timeScale = 1f; // restore normal speed in menu
+            ApplyBaseGameSpeed(); // ensure base speed active in menu
+            PendingAutoRestartRun = false;
 
-            // Reactivate main menu overlay if exists
             var mm = UnityEngine.Object.FindObjectOfType<BulletHeavenFortressDefense.UI.MainMenuController>(includeInactive:true);
             if (mm != null) mm.gameObject.SetActive(true);
         }
@@ -145,6 +185,11 @@ namespace BulletHeavenFortressDefense.Managers
             CurrentState = targetState;
             Debug.Log($"Game state changed to {CurrentState}");
             StateChanged?.Invoke(CurrentState);
+            // Re-apply base speed on every state change unless paused by external system
+            if (!Mathf.Approximately(Time.timeScale, 0f))
+            {
+                ApplyBaseGameSpeed();
+            }
         }
     }
 }

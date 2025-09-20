@@ -17,10 +17,40 @@ MonoBehaviour:
   prefab: {fileID: 4238061986199065120, guid: 6c5d0f04aa7573d4cb947941786c372e, type: 3}
   projectilePrefab: {fileID: 8269017022640902989, guid: 7c3b0a28c6773f4469100442eda0790d, type: 3}
   projectilePoolId: projectiles_basic
+  projectileSpeedBase: 0
   buildCost: 25
   damage: 5
-  fireRate: 1.5
+  fireRate: 5
   range: 3
   damageType: 0
   targetPriority: 0
   rotateTowardsTarget: 1
+  maxLevel: 10
+  upgradeCostBase: 20
+  upgradeCostGrowth: 1.5
+  upgradeCostExtraMult: 1
+  sellRefundPercent: 0.6
+  fireRatePerLevelMult: 1.15
+  rangePerLevelMult: 1.1
+  damagePerLevelMult: 1
+  damageFlatPerLevel: 0
+  isSplash: 0
+  splashRadiusBase: 1.5
+  splashRadiusPerLevelMult: 1.15
+  splashRadiusPerLevelFlat: 0
+  splashFalloffExponent: 1
+  isSlow: 0
+  slowFactorBase: 0.5
+  slowFactorPerLevelAdd: -0.03
+  slowDurationBase: 2
+  slowDurationPerLevelAdd: 0.25
+  projectilesPerShotBase: 1
+  projectilesPerShotPerLevel: 0.25
+  slowTowerDamageMultiplier: 0.6
+  isSniper: 0
+  sniperDamageMultiplier: 3
+  sniperPierceCount: 2
+  sniperCritChance: 0.15
+  sniperCritMultiplier: 2.5
+  sniperRangeMultiplier: 2.5
+  sniperProjectileSpeed: 0

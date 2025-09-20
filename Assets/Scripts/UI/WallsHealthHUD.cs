@@ -41,6 +41,8 @@ namespace BulletHeavenFortressDefense.UI
         private void Awake()
         {
             EnsureCanvas();
+            CaptureBaselines();
+            ApplyScaleIfAvailable();
             BuildGrid();
             // Make HUD canvas a root object to avoid DontDestroyOnLoad warning
             if (root != null && root.transform.parent != null)
@@ -51,9 +53,65 @@ namespace BulletHeavenFortressDefense.UI
             ApplyVisibility(GameManager.HasInstance ? GameManager.Instance.CurrentState : GameManager.GameState.MainMenu);
         }
 
+        private Vector2 _basePadding;
+        private Vector2 _baseCellSize;
+        private Vector2 _baseCellSpacing;
+        private Vector2 _baseGridPadding;
+        private float _baseFrameBorderThickness;
+        private bool _baselineCaptured = false;
+        private int _lastAppliedScaleVersion = -1;
+
+        private void CaptureBaselines()
+        {
+            if (_baselineCaptured) return;
+            _basePadding = padding;
+            _baseCellSize = cellSize;
+            _baseCellSpacing = cellSpacing;
+            _baseGridPadding = gridPadding;
+            _baseFrameBorderThickness = frameBorderThickness;
+            _baselineCaptured = true;
+        }
+
+        private void ApplyScaleIfAvailable()
+        {
+            // Only scale in landscape; if portrait just leave originals
+            if (Screen.width < Screen.height) return;
+            var sx = BulletHeavenFortressDefense.UI.HUDBootstrapper.PublishedScaleX;
+            var sy = BulletHeavenFortressDefense.UI.HUDBootstrapper.PublishedScaleY;
+            if (sx <= 0f || sy <= 0f) return;
+            // Prevent re-applying same scale version repeatedly (unless we add live rescale later)
+            if (_lastAppliedScaleVersion == BulletHeavenFortressDefense.UI.HUDBootstrapper.PublishedScaleVersion) return;
+            _lastAppliedScaleVersion = BulletHeavenFortressDefense.UI.HUDBootstrapper.PublishedScaleVersion;
+
+            // Revert to baselines first to avoid compounding
+            padding = _basePadding;
+            cellSize = _baseCellSize;
+            cellSpacing = _baseCellSpacing;
+            gridPadding = _baseGridPadding;
+            frameBorderThickness = _baseFrameBorderThickness;
+
+            padding = new Vector2(padding.x * sx, padding.y * sy);
+            cellSize = new Vector2(cellSize.x * sx, cellSize.y * sy);
+            cellSpacing = new Vector2(cellSpacing.x * sx, cellSpacing.y * sy);
+            gridPadding = new Vector2(gridPadding.x * sx, gridPadding.y * sy);
+            frameBorderThickness = frameBorderThickness * sy; // thickness ties to vertical scale
+
+            if (root != null)
+            {
+                root.anchoredPosition = new Vector2(padding.x, -padding.y);
+            }
+        }
+
         private void Update()
         {
             UpdateValues();
+            // Optionally respond to runtime HUD scale recalculations
+            if (_baselineCaptured && _lastAppliedScaleVersion != BulletHeavenFortressDefense.UI.HUDBootstrapper.PublishedScaleVersion)
+            {
+                // Rebuild everything at new scale
+                ApplyScaleIfAvailable();
+                BuildGrid();
+            }
             if (smoothFillLerp)
             {
                 for (int i = 0; i < _fills.Count; i++)
@@ -244,8 +302,10 @@ namespace BulletHeavenFortressDefense.UI
                     var label = labelGO.GetComponent<Text>();
                     label.alignment = TextAnchor.MiddleCenter;
                     label.color = Color.white;
-                    label.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-                    label.fontSize = 12;
+                    label.font = BulletHeavenFortressDefense.UI.UIFontProvider.Get();
+                    // Scale font relative to HUD published font base (12 baseline of cell label ~ 0.33 of menu baseline 36)
+                    int baseFont = BulletHeavenFortressDefense.UI.HUDBootstrapper.PublishedFontBase;
+                    label.fontSize = Mathf.RoundToInt(baseFont * 0.33f);
                     label.raycastTarget = false;
                     var lRect = label.GetComponent<RectTransform>();
                     lRect.anchorMin = new Vector2(0, 0);
@@ -468,11 +528,11 @@ namespace BulletHeavenFortressDefense.UI
             var labelGO = new GameObject("Label", typeof(Text));
             labelGO.transform.SetParent(btnGO.transform, false);
             _repairAllLabel = labelGO.GetComponent<Text>();
-            _repairAllLabel.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            _repairAllLabel.font = BulletHeavenFortressDefense.UI.UIFontProvider.Get();
             _repairAllLabel.text = "Repair"; // shorter
             _repairAllLabel.alignment = TextAnchor.MiddleCenter;
             _repairAllLabel.color = Color.white;
-            _repairAllLabel.fontSize = 13;
+            _repairAllLabel.fontSize = Mathf.RoundToInt(BulletHeavenFortressDefense.UI.HUDBootstrapper.PublishedFontBase * 0.36f); // ~13 at baseline 36
             var labelRt = labelGO.GetComponent<RectTransform>();
             labelRt.anchorMin = new Vector2(0, 0);
             labelRt.anchorMax = new Vector2(1, 1);
@@ -483,11 +543,11 @@ namespace BulletHeavenFortressDefense.UI
             var costGO = new GameObject("Cost", typeof(Text));
             costGO.transform.SetParent(rt, false);
             _repairAllCostLabel = costGO.GetComponent<Text>();
-            _repairAllCostLabel.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            _repairAllCostLabel.font = BulletHeavenFortressDefense.UI.UIFontProvider.Get();
             _repairAllCostLabel.text = "€0";
             _repairAllCostLabel.alignment = TextAnchor.MiddleLeft;
             _repairAllCostLabel.color = Color.white;
-            _repairAllCostLabel.fontSize = 12;
+            _repairAllCostLabel.fontSize = Mathf.RoundToInt(BulletHeavenFortressDefense.UI.HUDBootstrapper.PublishedFontBase * 0.33f);
             var costRt = costGO.GetComponent<RectTransform>();
             costRt.anchorMin = new Vector2(0f, 0f);
             costRt.anchorMax = new Vector2(0f, 1f);
