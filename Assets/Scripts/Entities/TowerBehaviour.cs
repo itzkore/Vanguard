@@ -132,6 +132,16 @@ namespace BulletHeavenFortressDefense.Entities
                 }
             }
             RecalculateStats();
+            // Attach star rank display if not present
+            if (GetComponent<BulletHeavenFortressDefense.UI.TowerStarRankDisplay>() == null)
+            {
+                gameObject.AddComponent<BulletHeavenFortressDefense.UI.TowerStarRankDisplay>();
+            }
+            // Attach simple level number (centered) if not present
+            if (GetComponent<BulletHeavenFortressDefense.UI.TowerLevelNumberDisplay>() == null)
+            {
+                gameObject.AddComponent<BulletHeavenFortressDefense.UI.TowerLevelNumberDisplay>();
+            }
         }
 
         // Local runtime override (when projectile prefab implies sniper behavior but data flag not set)

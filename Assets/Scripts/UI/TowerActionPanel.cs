@@ -14,7 +14,8 @@ namespace BulletHeavenFortressDefense.UI
         [SerializeField] private Text upgradeLabel;
         [SerializeField] private Button sellButton;
         [SerializeField] private Text sellLabel;
-        [SerializeField, Tooltip("Detailed stats area")] private Text statsText;
+        [SerializeField, Tooltip("Container for generated stat lines")] private RectTransform statsContainer;
+        [SerializeField, Tooltip("Prototype or pooled stat line prefab (optional)")] private UpgradeStatLine statLinePrefab;
 
         private TowerBehaviour _selected;
         private TowerRangeVisualizer _rangeVis; // visual range circle while selected
@@ -85,94 +86,115 @@ namespace BulletHeavenFortressDefense.UI
 
         private void BuildStatsText()
         {
-            if (statsText == null || _selected == null) return;
+            if (_selected == null || statsContainer == null) return;
+
+            // Clear existing children
+            for (int i = statsContainer.childCount - 1; i >= 0; i--)
+                Destroy(statsContainer.GetChild(i).gameObject);
+
             var td = _selected.Data;
             bool canUp = _selected.CanUpgrade();
 
             float fr = _selected.CurrentFireRate;
             float rng = _selected.CurrentRange;
-            float dmg = _selected.CurrentDamage > 0 ? _selected.CurrentDamage : _selected.BaseDamage; // current effective damage (includes slow penalty already)
+            float dmg = _selected.CurrentDamage > 0 ? _selected.CurrentDamage : _selected.BaseDamage;
             float nextFr = _selected.GetNextLevelFireRate();
-            // Simulate next-level damage including slow tower penalty if applicable
             float nextDmg = dmg;
             if (canUp)
             {
                 nextDmg = _selected.GetNextLevelDamage();
-                if (td != null && td.IsSlow)
-                {
-                    nextDmg *= td.SlowTowerDamageMultiplier; // mirror RecalculateStats application order
-                }
-                if (td != null && (td.IsSniper))
-                {
-                    nextDmg *= td.SniperDamageMultiplier; // mirror RecalculateStats sniper scaling
-                }
+                if (td != null && td.IsSlow) nextDmg *= td.SlowTowerDamageMultiplier;
+                if (td != null && td.IsSniper) nextDmg *= td.SniperDamageMultiplier;
             }
             float nextRng = _selected.GetNextLevelRange();
             float dps = dmg * fr;
             float nextDps = nextDmg * nextFr;
 
-            System.Text.StringBuilder sb = new System.Text.StringBuilder(256);
-            sb.Append($"Level: {_selected.Level} / {td.MaxLevel}\n");
+            System.Collections.Generic.List<(string label, string value, string nextVal, bool changed)> entries = new();
+            const float eps = 0.0001f;
+            entries.Add(("FR", fr.ToString("F2"), nextFr.ToString("F2"), canUp && !Mathf.Approximately(fr, nextFr)));
+            entries.Add(("Range", rng.ToString("F2"), nextRng.ToString("F2"), canUp && !Mathf.Approximately(rng, nextRng)));
+            bool dmgChanged = canUp && Mathf.Abs(nextDmg - dmg) > eps;
+            entries.Add(("DMG", dmg.ToString("F2"), nextDmg.ToString("F2"), dmgChanged));
+            entries.Add(("DPS", dps.ToString("F2"), nextDps.ToString("F2"), canUp && !Mathf.Approximately(dps, nextDps)));
 
-            // Core stats
-            sb.Append(canUp ? $"FR: {fr:F2} -> {nextFr:F2}\n" : $"FR: {fr:F2}\n");
-            sb.Append(canUp ? $"Range: {rng:F2} -> {nextRng:F2}\n" : $"Range: {rng:F2}\n");
-            float diff = nextDmg - dmg;
-            const float dmgEps = 0.0001f;
-            if (canUp && Mathf.Abs(diff) > dmgEps)
-            {
-                sb.Append($"Damage: {dmg:F2} -> {nextDmg:F2} (Δ{diff:+0.00;-0.00})\n");
-            }
-            else
-            {
-                sb.Append($"Damage: {dmg:F2}\n");
-            }
-            sb.Append(canUp ? $"DPS: {dps:F2} -> {nextDps:F2}\n" : $"DPS: {dps:F2}\n");
-
-            // Specializations
             if (td != null)
             {
                 if (td.IsSplash)
                 {
                     float r = _selected.CurrentSplashRadius;
                     float nextR = _selected.GetNextLevelSplashRadius();
+                    entries.Add(("AoE R", r.ToString("F2"), nextR.ToString("F2"), canUp && !Mathf.Approximately(r, nextR)));
                     float area = Mathf.PI * r * r;
                     float nextArea = Mathf.PI * nextR * nextR;
-                    sb.Append(canUp ? $"AoE Radius: {r:F2} -> {nextR:F2}\n" : $"AoE Radius: {r:F2}\n");
-                    sb.Append(canUp ? $"AoE Area: {area:F1} -> {nextArea:F1}\n" : $"AoE Area: {area:F1}\n");
-                    sb.Append($"Falloff Exp: {td.SplashFalloffExponent:F2}\n");
+                    entries.Add(("AoE A", area.ToString("F1"), nextArea.ToString("F1"), canUp && !Mathf.Approximately(area, nextArea)));
                 }
                 if (td.IsSlow)
                 {
                     float sf = _selected.CurrentSlowFactor;
                     float nextSf = _selected.GetNextLevelSlowFactor();
-                    float slowPercent = (1f - sf) * 100f; // percentage of speed reduction
+                    float slowPercent = (1f - sf) * 100f;
                     float nextSlowPercent = (1f - nextSf) * 100f;
                     float dur = _selected.CurrentSlowDuration;
                     float nextDur = _selected.GetNextLevelSlowDuration();
                     int proj = _selected.CurrentProjectilesPerShot;
                     int nextProj = _selected.GetNextLevelProjectilesPerShot();
-                    float projPerSec = proj * fr;
-                    float nextProjPerSec = nextProj * nextFr;
-
-                    sb.Append(canUp ? $"Slow: {slowPercent:F0}% -> {nextSlowPercent:F0}%\n" : $"Slow: {slowPercent:F0}%\n");
-                    sb.Append(canUp ? $"Slow Dur: {dur:F1}s -> {nextDur:F1}s\n" : $"Slow Dur: {dur:F1}s\n");
-                    sb.Append(canUp ? $"Proj/Shot: {proj} -> {nextProj}\n" : $"Proj/Shot: {proj}\n");
-                    sb.Append(canUp ? $"Proj/s: {projPerSec:F2} -> {nextProjPerSec:F2}\n" : $"Proj/s: {projPerSec:F2}\n");
+                    entries.Add(("Slow", slowPercent.ToString("F0")+"%", nextSlowPercent.ToString("F0")+"%", canUp && !Mathf.Approximately(slowPercent, nextSlowPercent)));
+                    entries.Add(("SlowDur", dur.ToString("F1"), nextDur.ToString("F1"), canUp && !Mathf.Approximately(dur, nextDur)));
+                    entries.Add(("Proj", proj.ToString(), nextProj.ToString(), canUp && proj != nextProj));
+                    entries.Add(("Proj/s", (proj*fr).ToString("F2"), (nextProj*nextFr).ToString("F2"), canUp && !Mathf.Approximately(proj*fr, nextProj*nextFr)));
                 }
                 if (td.IsSniper)
                 {
-                    // Pierce (negative means infinite)
                     int pierce = td.SniperPierceCount;
-                    string pierceLabel = pierce < 0 ? "∞" : (pierce == 0 ? "1 target" : (1 + pierce) + " targets");
-                    // Since pierce doesn't currently scale per level by design, we just show static
-                    sb.Append($"Pierce: {pierceLabel}\n");
+                    string pierceLabel = pierce < 0 ? "∞" : (pierce == 0 ? "1" : (1 + pierce).ToString());
+                    entries.Add(("Pierce", pierceLabel, pierceLabel, false));
                     float cc = td.SniperCritChance * 100f;
-                    sb.Append($"Crit: {cc:F0}% x{td.SniperCritMultiplier:F2}\n");
+                    entries.Add(("Crit%", cc.ToString("F0"), cc.ToString("F0"), false));
+                    entries.Add(("CritX", td.SniperCritMultiplier.ToString("F2"), td.SniperCritMultiplier.ToString("F2"), false));
                 }
             }
 
-            statsText.text = sb.ToString().TrimEnd('\n');
+            // Two column layout: left column gets first half (rounded up)
+            int total = entries.Count;
+            int leftCount = Mathf.CeilToInt(total / 2f);
+            // Create two column parents
+            var leftCol = new GameObject("ColLeft", typeof(RectTransform));
+            var leftRt = leftCol.GetComponent<RectTransform>(); leftRt.SetParent(statsContainer, false); leftRt.anchorMin = new Vector2(0f,1f); leftRt.anchorMax = new Vector2(0f,1f); leftRt.pivot = new Vector2(0f,1f);
+            var leftLayout = leftCol.AddComponent<VerticalLayoutGroup>(); leftLayout.spacing = 2f; leftLayout.childAlignment = TextAnchor.UpperLeft; leftLayout.childForceExpandWidth = false; leftLayout.childForceExpandHeight = false;
+            var leftLE = leftCol.AddComponent<LayoutElement>(); leftLE.preferredWidth = 560f;
+
+            var rightCol = new GameObject("ColRight", typeof(RectTransform));
+            var rightRt = rightCol.GetComponent<RectTransform>(); rightRt.SetParent(statsContainer, false); rightRt.anchorMin = new Vector2(0f,1f); rightRt.anchorMax = new Vector2(0f,1f); rightRt.pivot = new Vector2(0f,1f);
+            var rightLayout = rightCol.AddComponent<VerticalLayoutGroup>(); rightLayout.spacing = 2f; rightLayout.childAlignment = TextAnchor.UpperLeft; rightLayout.childForceExpandWidth = false; rightLayout.childForceExpandHeight = false;
+            var rightLE = rightCol.AddComponent<LayoutElement>(); rightLE.preferredWidth = 560f;
+
+            Font fnt = titleText != null ? titleText.font : Resources.GetBuiltinResource<Font>("Arial.ttf");
+            int baseSize = titleText != null ? Mathf.RoundToInt(titleText.fontSize * 0.75f) : 14;
+
+            UpgradeStatLine MakeLine(Transform parent)
+            {
+                UpgradeStatLine line;
+                if (statLinePrefab != null)
+                {
+                    line = Instantiate(statLinePrefab, parent);
+                }
+                else
+                {
+                    var go = new GameObject("StatLine", typeof(RectTransform));
+                    go.transform.SetParent(parent, false);
+                    line = go.AddComponent<UpgradeStatLine>();
+                }
+                return line;
+            }
+
+            for (int i = 0; i < total; i++)
+            {
+                var e = entries[i];
+                var parent = i < leftCount ? leftCol.transform : rightCol.transform;
+                var line = MakeLine(parent);
+                line.Configure(e.label, e.value, e.nextVal, e.changed, fnt, baseSize);
+            }
         }
 
         private void SetupUpgradeButton()

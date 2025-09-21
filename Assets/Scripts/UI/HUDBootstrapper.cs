@@ -1027,7 +1027,7 @@ namespace BulletHeavenFortressDefense.UI
             overlayImage.color = new Color(0f, 0f, 0f, 0.5f); // dim background
             overlayImage.raycastTarget = true; // capture clicks
 
-            // Window centered in screen
+            // Window centered in screen (compact)
             var windowGO = new GameObject("Window", typeof(RectTransform));
             windowGO.layer = LayerMask.NameToLayer("UI");
             var windowRect = windowGO.GetComponent<RectTransform>();
@@ -1036,21 +1036,20 @@ namespace BulletHeavenFortressDefense.UI
             windowRect.anchorMax = new Vector2(0.5f, 0.5f);
             windowRect.pivot = new Vector2(0.5f, 0.5f);
             windowRect.anchoredPosition = Vector2.zero;
-            windowRect.sizeDelta = new Vector2(680f, 480f); // further enlarged
+            windowRect.sizeDelta = new Vector2(1200f, 600f); // updated user requested size
 
             var bg = windowGO.AddComponent<Image>();
             bg.color = new Color(0.07f, 0.09f, 0.13f, 0.95f);
 
             var layout = windowGO.AddComponent<VerticalLayoutGroup>();
-            layout.padding = new RectOffset(14, 14, 14, 14);
-            layout.spacing = 8f;
+            layout.padding = new RectOffset(10, 10, 10, 10);
+            layout.spacing = 4f;
             layout.childAlignment = TextAnchor.UpperLeft;
+            layout.childForceExpandWidth = true;
 
-            var fitter = windowGO.AddComponent<ContentSizeFitter>();
-            fitter.horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
-            fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+            // No auto expand; fixed size with internal scroll for stats
 
-            Text MakeLbl(string defaultText)
+            Text MakeLbl(string defaultText, float w = 200f, float h = 26f, float sizeMult = 0.5f)
             {
                 var go = new GameObject("Label", typeof(RectTransform));
                 go.layer = LayerMask.NameToLayer("UI");
@@ -1059,35 +1058,85 @@ namespace BulletHeavenFortressDefense.UI
                 t.alignment = TextAnchor.MiddleLeft;
                 t.color = Color.white;
                 t.font = font;
-                t.fontSize = Mathf.RoundToInt(fontSize * 0.6f);
+                t.fontSize = Mathf.RoundToInt(fontSize * sizeMult);
                 var r = go.GetComponent<RectTransform>();
                 // Parent to the centered upgrade window
                 r.SetParent(windowGO.transform, false);
-                r.sizeDelta = new Vector2(220f, 32f);
+                r.sizeDelta = new Vector2(w, h);
                 return t;
             }
+            // Title row (standalone for breathing space)
+            var title = MakeLbl("Selected: --", 900f, 40f, 0.70f);
+            var titleRow = new GameObject("TitleRow", typeof(RectTransform));
+            titleRow.transform.SetParent(windowGO.transform, false);
+            var titleLayout = titleRow.AddComponent<HorizontalLayoutGroup>();
+            titleLayout.spacing = 4f; titleLayout.childAlignment = TextAnchor.MiddleLeft; titleLayout.childForceExpandWidth = false; titleLayout.childForceExpandHeight = false;
+            title.transform.SetParent(titleRow.transform, false);
 
-            var title = MakeLbl("Selected: --");
-            var level = MakeLbl("Level: 1");
-            var invested = MakeLbl("Invested: € 0");
-            var stats = MakeLbl("Stats\nFR: --\nRange: --\nDamage: --");
-            // Give stats block more height
-            var statsRect = stats.GetComponent<RectTransform>();
-            statsRect.sizeDelta = new Vector2(600f, 220f);
+            // Secondary info row (level + invested with spacer)
+            var level = MakeLbl("Level: 1", 200f, 30f, 0.55f);
+            var invested = MakeLbl("Invested: € 0", 300f, 30f, 0.55f);
+            var metaRow = new GameObject("MetaRow", typeof(RectTransform));
+            metaRow.transform.SetParent(windowGO.transform, false);
+            var metaLayout = metaRow.AddComponent<HorizontalLayoutGroup>();
+            metaLayout.spacing = 14f; metaLayout.childAlignment = TextAnchor.MiddleLeft; metaLayout.childForceExpandWidth = true; metaLayout.childForceExpandHeight = false;
 
-            var upgradeBtn = CreateButton(windowGO.transform, "Upgrade", font);
+            // Icon before level (simple diamond)
+            var lvlIconGO = new GameObject("LevelIcon", typeof(RectTransform));
+            lvlIconGO.transform.SetParent(metaRow.transform, false);
+            var lvlIconText = lvlIconGO.AddComponent<Text>();
+            lvlIconText.text = "◆"; lvlIconText.font = font; lvlIconText.color = new Color(0.85f,0.85f,0.95f,1f); lvlIconText.alignment = TextAnchor.MiddleCenter; lvlIconText.fontSize = Mathf.RoundToInt(fontSize * 0.55f);
+            var lvlIconRT = lvlIconGO.GetComponent<RectTransform>(); lvlIconRT.sizeDelta = new Vector2(26f,30f);
+
+            level.transform.SetParent(metaRow.transform, false);
+
+            // Flexible spacer
+            var spacerGO = new GameObject("Spacer", typeof(RectTransform));
+            spacerGO.transform.SetParent(metaRow.transform, false);
+            var spacerLE = spacerGO.AddComponent<LayoutElement>(); spacerLE.flexibleWidth = 1f; spacerLE.minWidth = 10f;
+
+            invested.alignment = TextAnchor.MiddleRight;
+            invested.transform.SetParent(metaRow.transform, false);
+
+            // Thin divider line before stats
+            var divider = new GameObject("Divider", typeof(RectTransform));
+            divider.transform.SetParent(windowGO.transform, false);
+            var divRT = divider.GetComponent<RectTransform>();
+            divRT.sizeDelta = new Vector2(0f, 1f);
+            var divImg = divider.AddComponent<Image>();
+            divImg.color = new Color(1f,1f,1f,0.08f);
+            var divLE = divider.AddComponent<LayoutElement>(); divLE.preferredHeight = 1f; divLE.minHeight = 1f;
+
+            // Stats container (flex) -> will host two dynamic columns
+            var statsRow = new GameObject("StatsContainer", typeof(RectTransform));
+            statsRow.transform.SetParent(windowGO.transform, false);
+            var statsRowLayout = statsRow.AddComponent<HorizontalLayoutGroup>();
+            statsRowLayout.spacing = 40f; statsRowLayout.childAlignment = TextAnchor.UpperLeft; statsRowLayout.childForceExpandWidth = false; statsRowLayout.childForceExpandHeight = false;
+            var statsLE = statsRow.AddComponent<LayoutElement>();
+            statsLE.flexibleHeight = 1f;
+            var statsRT = statsRow.GetComponent<RectTransform>();
+            statsRT.sizeDelta = new Vector2(0f, 0f);
+
+            // Bottom button row
+            var buttonRow = new GameObject("ButtonRow", typeof(RectTransform));
+            buttonRow.transform.SetParent(windowGO.transform, false);
+            var buttonLayout = buttonRow.AddComponent<HorizontalLayoutGroup>();
+            buttonLayout.spacing = 20f; buttonLayout.childAlignment = TextAnchor.MiddleCenter;
+            buttonLayout.childForceExpandWidth = false; buttonLayout.childForceExpandHeight = false;
+
+            var upgradeBtn = CreateButton(buttonRow.transform, "Upgrade", font);
             var upgradeLbl = upgradeBtn.GetComponentInChildren<Text>();
-            var sellBtn = CreateButton(windowGO.transform, "Sell", font);
+            var sellBtn = CreateButton(buttonRow.transform, "Sell", font);
             var sellLbl = sellBtn.GetComponentInChildren<Text>();
 
             // Widen buttons to accommodate long cost strings (e.g., large upgrade prices)
             var upRect = upgradeBtn.GetComponent<RectTransform>();
-            upRect.sizeDelta = new Vector2(640f, upRect.sizeDelta.y);
+            upRect.sizeDelta = new Vector2(420f, upRect.sizeDelta.y);
             var upLE = upgradeBtn.GetComponent<LayoutElement>();
             if (upLE != null)
             {
-                upLE.preferredWidth = 640f;
-                upLE.minWidth = 480f;
+                upLE.preferredWidth = 420f;
+                upLE.minWidth = 380f;
             }
             if (upgradeLbl != null)
             {
@@ -1101,7 +1150,12 @@ namespace BulletHeavenFortressDefense.UI
             if (sellLE != null)
             {
                 sellLE.preferredWidth = 420f;
-                sellLE.minWidth = 300f;
+                sellLE.minWidth = 380f;
+            }
+            if (sellLbl != null)
+            {
+                sellLbl.resizeTextForBestFit = true;
+                sellLbl.resizeTextMinSize = Mathf.RoundToInt(fontSize * 0.35f);
             }
 
             var widget = windowGO.AddComponent<TowerActionPanel>();
@@ -1114,7 +1168,7 @@ namespace BulletHeavenFortressDefense.UI
             widget.GetType().GetField("sellButton", flags)?.SetValue(widget, sellBtn);
             widget.GetType().GetField("sellLabel", flags)?.SetValue(widget, sellLbl);
             widget.GetType().GetField("investedText", flags)?.SetValue(widget, invested);
-            widget.GetType().GetField("statsText", flags)?.SetValue(widget, stats);
+            widget.GetType().GetField("statsContainer", flags)?.SetValue(widget, statsRT);
 
             // Hidden until selection
             overlayGO.SetActive(false);
