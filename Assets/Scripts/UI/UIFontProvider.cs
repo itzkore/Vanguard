@@ -13,9 +13,9 @@ namespace BulletHeavenFortressDefense.UI
         private static Font _orbitronBold;
         private static bool _attemptedLoad = false;
 
-        [SerializeField, Tooltip("Resource path (under Resources/) to regular Orbitron font asset.")] private string orbitronRegularPath = "Fonts/Orbitron-Regular";
-        [SerializeField, Tooltip("Resource path (under Resources/) to bold Orbitron font asset.")] private string orbitronBoldPath = "Fonts/Orbitron-Bold";
-        [SerializeField, Tooltip("Log font load process.")] private bool logLoad = false;
+        [SerializeField, Tooltip("Resource path (under Resources/) to regular Orbitron font asset.")] private string orbitronRegularPath = "Fonts/Orbitron/static/Orbitron-Regular";
+        [SerializeField, Tooltip("Resource path (under Resources/) to bold Orbitron font asset.")] private string orbitronBoldPath = "Fonts/Orbitron/static/Orbitron-Bold";
+        [SerializeField, Tooltip("Log font load process.")] private bool logLoad = true;
 
         private void Awake()
         {
@@ -42,8 +42,8 @@ namespace BulletHeavenFortressDefense.UI
             // Lazy load if provider not in scene
             if (!_attemptedLoad)
             {
-                _orbitron = Resources.Load<Font>("Fonts/Orbitron-Regular");
-                _orbitronBold = Resources.Load<Font>("Fonts/Orbitron-Bold");
+                _orbitron = Resources.Load<Font>("Fonts/Orbitron/static/Orbitron-Regular");
+                _orbitronBold = Resources.Load<Font>("Fonts/Orbitron/static/Orbitron-Bold");
                 _attemptedLoad = true;
             }
             var f = bold ? (_orbitronBold != null ? _orbitronBold : _orbitron) : _orbitron;

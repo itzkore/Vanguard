@@ -114,8 +114,8 @@ namespace BulletHeavenFortressDefense.UI
             titleRT.anchoredPosition = new Vector2(0, -120);
             titleRT.sizeDelta = new Vector2(1000, 140);
             var titleText = titleGO.AddComponent<Text>();
-            titleText.font = font;
-            titleText.fontSize = 72;
+            titleText.font = BulletHeavenFortressDefense.UI.UIFontProvider.Get(bold: true); // Use bold Orbitron for the logo
+            titleText.fontSize = 84; // Increased size to showcase the Orbitron font
             titleText.alignment = TextAnchor.MiddleCenter;
             titleText.text = "VANGUARD";
             titleText.color = new Color(0.95f, 0.96f, 1f, 1f);
