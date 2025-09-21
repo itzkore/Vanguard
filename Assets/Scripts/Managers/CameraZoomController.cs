@@ -117,7 +117,8 @@ namespace BulletHeavenFortressDefense.Managers
                     _targetSize = Mathf.Clamp(_targetSize - wheel * wheelZoomSpeed, minOrthoSize, maxOrthoSize);
                 }
 
-                // Pinch gesture for touch screens
+                // Pinch gesture for touch screens (new Input System first)
+                bool pinchActive = false;
                 if (Touchscreen.current != null && Touchscreen.current.touches.Count == 2)
                 {
                     var touches = Touchscreen.current.touches;
@@ -126,11 +127,29 @@ namespace BulletHeavenFortressDefense.Managers
                     {
                         float delta = dist - _prevPinchDistance;
                         _targetSize -= delta * pinchZoomSpeed;
+                        // Debug pinch delta (can be silenced by commenting out)
+                        // Debug.Log($"[Zoom] Pinch(NS) delta={delta:F2} targetSize={_targetSize:F2}");
                     }
                     _prevPinchDistance = dist;
                     _pinching = true;
+                    pinchActive = true;
                 }
-                else
+                // Legacy Input fallback (touchCount based)
+                else if (Input.touchCount == 2)
+                {
+                    var t0 = Input.touches[0]; var t1 = Input.touches[1];
+                    float dist = Vector2.Distance(t0.position, t1.position);
+                    if (_pinching)
+                    {
+                        float delta = dist - _prevPinchDistance;
+                        _targetSize -= delta * pinchZoomSpeed;
+                        // Debug.Log($"[Zoom] Pinch(legacy) delta={delta:F2} targetSize={_targetSize:F2}");
+                    }
+                    _prevPinchDistance = dist;
+                    _pinching = true;
+                    pinchActive = true;
+                }
+                if (!pinchActive)
                 {
                     _pinching = false;
                 }

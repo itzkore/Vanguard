@@ -11,7 +11,8 @@ namespace BulletHeavenFortressDefense.Systems
         [SerializeField] private Transform[] enemySpawnPoints;
         [SerializeField] private Transform[] towerSpawnPoints;
         [Header("Dynamic Edge Spawning")]
-        [SerializeField, Tooltip("World X position to use when spawning along the right edge. If zero, uses main camera right viewport edge.")] private float rightEdgeWorldX = 25f;
+    [SerializeField, Tooltip("World X position to use when spawning along the right edge. If zero, uses main camera right viewport edge.")] private float rightEdgeWorldX = 25f;
+    [SerializeField, Tooltip("Extra world offset added to computed right edge spawn X (allows spawning slightly off-screen)." )] private float spawnRightViewportOffset = 2.5f;
         [SerializeField, Tooltip("Padding from top/bottom when picking a random Y along the right edge.")] private float verticalEdgePadding = 0.5f;
         [SerializeField, Tooltip("Check and avoid spawning overlapping other enemies when using right-edge spawn.")] private bool avoidOverlapOnRightEdge = true;
         [SerializeField, Tooltip("Radius for overlap checks when spawning along right edge.")] private float overlapCheckRadius = 0.22f;
@@ -494,6 +495,8 @@ namespace BulletHeavenFortressDefense.Systems
                 minY = cy3 - minSpanOrtho * 0.5f;
                 maxY = cy3 + minSpanOrtho * 0.5f;
             }
+            rightX += spawnRightViewportOffset; // push spawn further right (off-screen entry)
+            // Debug.Log($"[SpawnSystem] Computed right edge X={rightX:F2} (offset={spawnRightViewportOffset:F2})");
             return true;
         }
 

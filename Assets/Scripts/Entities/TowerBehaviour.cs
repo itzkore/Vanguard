@@ -251,13 +251,23 @@ namespace BulletHeavenFortressDefense.Entities
             if (_mount != null)
             {
                 var mountRef = _mount;
-                _mount = null;
-                mountRef.DestroyMountedTower();
+                _mount = null; // prevent recursion issues
+                // Remove from manager then notify mount so it frees itself and becomes available
+                Managers.TowerManager.Instance?.RemoveTower(this);
+                mountRef.NotifyTowerDestroyed(this);
+                // Refresh visual indicator if present
+                if (mountRef.TryGetComponent<BulletHeavenFortressDefense.Fortress.MountSpotVisual>(out var vis))
+                {
+                    vis.Refresh();
+                }
+                Debug.Log($"[TowerSell] {DisplayName} sold. Refund={refund} Mount at {mountRef.transform.position} freed.");
             }
             else
             {
                 Managers.TowerManager.Instance?.RemoveTower(this);
             }
+            // Finally destroy the tower gameObject
+            Destroy(gameObject);
         }
 
         private void RecalculateStats()

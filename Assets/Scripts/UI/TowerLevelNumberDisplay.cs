@@ -75,6 +75,7 @@ namespace BulletHeavenFortressDefense.UI
             go.transform.SetParent(transform, false);
             _canvas = go.AddComponent<Canvas>();
             _canvas.renderMode = RenderMode.WorldSpace;
+            _canvas.sortingOrder = 50; // above towers (5) and projectiles (20)
             var scaler = go.AddComponent<CanvasScaler>();
             scaler.dynamicPixelsPerUnit = 32f;
             go.AddComponent<GraphicRaycaster>();

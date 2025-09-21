@@ -143,6 +143,7 @@ GameObject:
   - component: {fileID: 330902688}
   - component: {fileID: 330902690}
   - component: {fileID: 330902691}
+  - component: {fileID: 330902692}
   m_Layer: 0
   m_Name: GameRoot
   m_TagString: Untagged
@@ -217,6 +218,7 @@ MonoBehaviour:
   - {fileID: 1902998711}
   towerSpawnPoints: []
   rightEdgeWorldX: 0
+  spawnRightViewportOffset: 2.5
   verticalEdgePadding: 0.5
   avoidOverlapOnRightEdge: 1
   overlapCheckRadius: 0.22
@@ -368,6 +370,8 @@ MonoBehaviour:
   onPhaseChanged: {fileID: 0}
   onWaveStarted: {fileID: 0}
   onWaveCompleted: {fileID: 0}
+  cloneWavesAtRuntime: 1
+  regenerateClonesEachRun: 1
   autoGenerateSequence: 1
   defaultEnemyData: {fileID: 0}
   targetAutoWaves: 100
@@ -381,6 +385,10 @@ MonoBehaviour:
   minEnemySpawnX: -9999
   forceRightEdgeColumn: 1
   rightEdgeRandomInsetMax: 0.2
+  useSpawnBuffer: 1
+  useSpawnScheduler: 1
+  bufferThreshold: 10
+  bufferWaveRemainingThreshold: 300
   rightEdgeSpawnPattern: 2
   randomizePatternPerWave: 0
   patternHorizontalDepth: 5
@@ -391,7 +399,6 @@ MonoBehaviour:
   earlyWaveFastStart: 1
   fastStartWaves: 2
   earlyWaveRightEdgeOffset: 0.75
-  firstWaveInstantBurstCount: 6
   firstWaveIntervalClamp: 0.25
   progressiveLargeWaveSpawning: 1
   progressiveSpawnThreshold: 60
@@ -421,6 +428,41 @@ MonoBehaviour:
   baselineResolution: {x: 800, y: 480}
   dynamicRescale: 1
   applySafeArea: 1
+--- !u!114 &330902692
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 330902674}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9ead3101d3122d346a53fb528e688061, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  enableMerging: 1
+  scanInterval: 1
+  clusterRadius: 1.2
+  mergeThreshold: 10
+  baseSizeScale: 1.6
+  extraSizePerEnemy: 0.05
+  baseHealthMultiplier: 10
+  baseDamageMultiplier: 10
+  baseSpeedMultiplier: 1.15
+  maxStackCount: 40
+  mergeFxPrefab: {fileID: 0}
+  verboseLogs: 0
+  superIconPrefab: {fileID: 0}
+  baseSafeZoneX: 2.5
+  useRadialSafeZone: 0
+  baseSafeZoneRadius: 2.2
+  enableSplitOnDeath: 1
+  splitSpawnCount: 4
+  minStackForSplit: 8
+  splitStackFraction: 0.5
+  splitChildSizeScale: 0.9
+  splitChildMergeGrace: 1.5
+  splitFxPrefab: {fileID: 0}
 --- !u!1 &791167535
 GameObject:
   m_ObjectHideFlags: 0
@@ -637,6 +679,7 @@ MonoBehaviour:
   targetCamera: {fileID: 0}
   minOrthoSize: 2.5
   maxOrthoSize: 8
+  autoNormalizeAtStart: 1
   boundsMinX: 0
   boundsMaxX: -1
   boundsMinY: 0
@@ -650,6 +693,10 @@ MonoBehaviour:
   blockPanningWhenPointerOverUI: 0
   panSpeedPerPixel: 1
   panSmoothing: 18
+  extraRightPanSpace: 10
+  panZoomScalePower: 0.35
+  keyboardPanSpeed: 12
+  keyboardPanZoomPower: 0.5
 --- !u!114 &1026355283
 MonoBehaviour:
   m_ObjectHideFlags: 0

@@ -100,6 +100,9 @@ namespace BulletHeavenFortressDefense.Systems
                     visualBlocked.SetVisible(true, false);
                 }
                 onPlacementFailed?.Raise();
+                // CANCEL pending placement (same behavior as clicking off an empty area)
+                _pendingTower = null;
+                HideAllSpots();
                 return true;
             }
 

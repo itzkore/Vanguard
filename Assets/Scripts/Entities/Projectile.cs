@@ -39,6 +39,15 @@ namespace BulletHeavenFortressDefense.Entities
             {
                 speed = source.ProjectileSpeedBase;
             }
+            // Ensure projectile renders above towers (towers use order ~5 per TowerManager)
+            var srs = GetComponentsInChildren<SpriteRenderer>(true);
+            if (srs != null)
+            {
+                for (int i = 0; i < srs.Length; i++)
+                {
+                    if (srs[i] != null && srs[i].sortingOrder < 20) srs[i].sortingOrder = 20;
+                }
+            }
         }
 
         private void Update()

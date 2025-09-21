@@ -21,6 +21,7 @@ namespace BulletHeavenFortressDefense.Managers
         [SerializeField] private float placementRadius = 0.45f;
         [Header("Rendering")]
         [SerializeField] private int towerSortingOrder = 5; // ensure towers render above walls (order 0)
+    public int TowerSortingOrder => towerSortingOrder;
 
         [Header("Late Discovery / Reliability")]
         [Tooltip("Max retry attempts to rescan Resources/TowerData for late-loaded tower assets (runtime builds)." )]
