@@ -6,9 +6,9 @@ namespace BulletHeavenFortressDefense.Managers
 {
     public class SelectionManager : Utilities.Singleton<SelectionManager>
     {
-        [SerializeField] private UI.TowerActionPanel actionPanel;
-        [SerializeField] private LayerMask towerMask;
-        [SerializeField] private RectTransform upgradeOverlay;
+    [SerializeField] private UI.TowerActionPanel actionPanel;
+    [SerializeField] private LayerMask towerMask;
+    [SerializeField] private RectTransform upgradeOverlay;
         [Header("Debug / Selection Tuning")]
         [SerializeField, Tooltip("Enable detailed debug logs for tower selection.")] private bool verboseSelection = true;
         [SerializeField, Tooltip("Extra radius used if direct point hit misses a tower.")] private float fallbackRadius = 0.30f;
@@ -17,9 +17,24 @@ namespace BulletHeavenFortressDefense.Managers
     [SerializeField, Tooltip("Enable extremely verbose path tracing logs.")] private bool ultraVerbose = false;
     [SerializeField, Tooltip("Only treat genuinely interactive UI (buttons, sliders, upgrade panel, etc.) as click-blocking; ignore passive full-screen graphics.")] private bool onlyInteractiveUIBlocks = true;
     [SerializeField, Tooltip("If true, tower clicks will NOT be blocked when pointer is over 'Ready/Start' run control button; that button will still receive its own onClick.")] private bool allowThroughRunButton = true;
+    [Header("Selection Tweaks")]
+    [SerializeField, Tooltip("If true, non-interactive background areas of the upgrade overlay will NOT block tower selection.")] private bool allowThroughUpgradeOverlay = true;
+    [SerializeField, Tooltip("Scale fallbackRadius with orthographic zoom so selection stays easy when zoomed out.")] private bool scaleFallbackRadiusWithZoom = true;
+    [SerializeField, Tooltip("Clamp multiplier when scaling fallback radius (1 = baseline). Higher gives more generous selection when zoomed out.")] private float maxFallbackScale = 2.2f;
+    [Header("Touch Selection")] 
+    [SerializeField, Tooltip("Primary tap radius multiplier applied to fallback & proximity radii for touch (finger less precise).")] private float touchRadiusMult = 1.6f;
+    [SerializeField, Tooltip("Max finger travel (screen pixels) still considered a tap.")] private float maxTapMove = 45f;
+    [SerializeField, Tooltip("Max time (s) between touch begin and end to count as a tap.")] private float maxTapTime = 0.45f;
+    [SerializeField, Tooltip("Ignore tap selection if more than one touch is active (pinch/gesture). ")] private bool blockMultiTouch = true;
+    [SerializeField, Tooltip("When a tap hits nothing, try an expanded circle immediately (touch comfort). ")] private bool expandImmediateIfMiss = true;
+
+    private Vector2 _touchStartPos;
+    private float _touchStartTime;
+    private bool _touchTracking;
 
         private Camera _cam;
     private static readonly System.Collections.Generic.List<RaycastResult> _uiRaycastResults = new();
+    private float _baselineOrthoSize = -1f;
 
         private void Start()
         {
@@ -27,6 +42,10 @@ namespace BulletHeavenFortressDefense.Managers
             if (towerMask == 0)
             {
                 towerMask = Physics2D.AllLayers;
+            }
+            if (_cam != null && _cam.orthographic && _baselineOrthoSize < 0f)
+            {
+                _baselineOrthoSize = _cam.orthographicSize;
             }
         }
 
@@ -46,10 +65,53 @@ namespace BulletHeavenFortressDefense.Managers
 
         private void Update()
         {
+            // Mouse (desktop) path
             if (Input.GetMouseButtonDown(0))
             {
                 if (PointerBlockedByUI()) return;
-                TrySelectAt(Input.mousePosition);
+                TrySelectAt(Input.mousePosition, false);
+            }
+
+            // Touch path (explicit to gain better control over radius & gesture filtering)
+            if (Input.touchSupported)
+            {
+                int tc = Input.touchCount;
+                if (tc == 1)
+                {
+                    var t = Input.GetTouch(0);
+                    switch (t.phase)
+                    {
+                        case TouchPhase.Began:
+                            if (PointerBlockedByUI()) { _touchTracking = false; break; }
+                            _touchStartPos = t.position; _touchStartTime = Time.unscaledTime; _touchTracking = true; break;
+                        case TouchPhase.Moved:
+                        case TouchPhase.Stationary:
+                            if (_touchTracking)
+                            {
+                                float dist = (t.position - _touchStartPos).magnitude;
+                                if (dist > maxTapMove) _touchTracking = false; // treat as drag
+                            }
+                            break;
+                        case TouchPhase.Ended:
+                            if (_touchTracking)
+                            {
+                                float dt = Time.unscaledTime - _touchStartTime;
+                                if (dt <= maxTapTime)
+                                {
+                                    // Valid tap
+                                    TrySelectAt(t.position, true);
+                                }
+                            }
+                            _touchTracking = false;
+                            break;
+                        case TouchPhase.Canceled:
+                            _touchTracking = false; break;
+                    }
+                }
+                else if (tc > 1 && blockMultiTouch)
+                {
+                    _touchTracking = false; // pinch or multi-touch gesture
+                }
             }
         }
 
@@ -90,7 +152,30 @@ namespace BulletHeavenFortressDefense.Managers
         private bool IsInteractive(GameObject go)
         {
             // Upgrade overlay or action panel itself
-            if (upgradeOverlay != null && go.transform.IsChildOf(upgradeOverlay)) return true;
+            if (upgradeOverlay != null && go.transform.IsChildOf(upgradeOverlay))
+            {
+                if (allowThroughUpgradeOverlay)
+                {
+                    // Treat only actually interactive widgets as blocking, not the panel backdrop / decorative images.
+                    if (go.GetComponent<UnityEngine.UI.Button>() == null &&
+                        go.GetComponent<UnityEngine.UI.Slider>() == null &&
+                        go.GetComponent<UnityEngine.UI.Toggle>() == null &&
+                        go.GetComponent<UnityEngine.UI.Dropdown>() == null &&
+                        go.GetComponent<UnityEngine.UI.ScrollRect>() == null &&
+                        go.GetComponent<UnityEngine.UI.InputField>() == null
+#if TMP_PRESENT
+                        && go.GetComponent<TMPro.TMP_InputField>() == null
+#endif
+                        )
+                    {
+                        return false; // passive part of overlay -> let selection pass through
+                    }
+                }
+                else
+                {
+                    return true; // legacy behavior
+                }
+            }
             if (actionPanel != null && go.transform.IsChildOf(actionPanel.transform)) return true;
 
             // If configured, allow the RunControlPanel start/ready button to NOT block tower selection.
@@ -131,7 +216,7 @@ namespace BulletHeavenFortressDefense.Managers
             return false;
         }
 
-        private void TrySelectAt(Vector3 screenPos)
+        private void TrySelectAt(Vector3 screenPos, bool isTouch)
         {
             if (_cam == null)
             {
@@ -160,31 +245,73 @@ namespace BulletHeavenFortressDefense.Managers
             world.z = 0f; // ensure 2D plane
 
             if (ultraVerbose) Debug.Log("[SelectionManager] ---- Selection Attempt START ----");
-            Collider2D hit = Physics2D.OverlapPoint(world, towerMask);
-            if (verboseSelection) Debug.Log($"[SelectionManager] Click world=({world.x:F2},{world.y:F2}) primaryHit={(hit != null ? hit.name : "null")} mask={towerMask.value}");
-
+            Collider2D primary = null;
             TowerBehaviour tower = null;
-            if (hit != null && !hit.TryGetComponent<TowerBehaviour>(out tower))
+            // Helper local to pick nearest from candidates
+            TowerBehaviour PickNearest(System.Collections.Generic.List<TowerBehaviour> list, Vector2 wpos, out Collider2D srcCol)
             {
-                // Might have clicked a child collider – search parents
-                tower = hit.GetComponentInParent<TowerBehaviour>();
+                srcCol = null;
+                if (list == null || list.Count == 0) return null;
+                float best = float.MaxValue; TowerBehaviour bestT = null; Collider2D bestCol = null;
+                for (int i = 0; i < list.Count; i++)
+                {
+                    var t = list[i]; if (t == null) continue;
+                    float d2 = (t.transform.position - (Vector3)wpos).sqrMagnitude;
+                    if (d2 < best)
+                    {
+                        best = d2; bestT = t;
+                        // Try grab a collider on this object for logging
+                        bestCol = t.GetComponentInChildren<Collider2D>();
+                    }
+                }
+                srcCol = bestCol; return bestT;
+            }
+
+            var pointHits = Physics2D.OverlapPointAll(world, towerMask);
+            if (pointHits != null && pointHits.Length > 0)
+            {
+                var candidates = new System.Collections.Generic.List<TowerBehaviour>(pointHits.Length);
+                for (int i = 0; i < pointHits.Length; i++)
+                {
+                    var h = pointHits[i]; if (h == null) continue;
+                    if (h.TryGetComponent<TowerBehaviour>(out var tb)) candidates.Add(tb); else {
+                        var tb2 = h.GetComponentInParent<TowerBehaviour>(); if (tb2 != null) candidates.Add(tb2);
+                    }
+                }
+                tower = PickNearest(candidates, world, out primary);
+            }
+            if (verboseSelection)
+            {
+                string primaryName = primary != null ? primary.name : "null";
+                int total = pointHits != null ? pointHits.Length : 0;
+                Debug.Log($"[SelectionManager] Click world=({world.x:F2},{world.y:F2}) pointHits={total} nearestTower={(tower!=null?tower.name:"null")} collider={primaryName}");
             }
 
             if (tower == null)
             {
-                var hits = Physics2D.OverlapCircleAll(world, fallbackRadius, towerMask);
-                if (verboseSelection) Debug.Log($"[SelectionManager] Fallback collider search radius={fallbackRadius} -> {hits.Length} colliders");
-                for (int i = 0; i < hits.Length && tower == null; i++)
+                float effectiveFallback = fallbackRadius;
+                if (scaleFallbackRadiusWithZoom && _cam != null && _cam.orthographic && _baselineOrthoSize > 0f)
                 {
-                    var h = hits[i];
-                    if (h == null) continue;
-                    if (!h.TryGetComponent<TowerBehaviour>(out tower))
+                    float mult = _cam.orthographicSize / _baselineOrthoSize;
+                    mult = Mathf.Clamp(mult, 0.6f, maxFallbackScale);
+                    effectiveFallback *= mult;
+                }
+                if (isTouch) effectiveFallback *= touchRadiusMult;
+                var hits = Physics2D.OverlapCircleAll(world, effectiveFallback, towerMask);
+                if (verboseSelection) Debug.Log($"[SelectionManager] Fallback collider search radius={effectiveFallback:F2} -> {hits.Length} colliders");
+                if (hits.Length > 0)
+                {
+                    var candidates = new System.Collections.Generic.List<TowerBehaviour>(hits.Length);
+                    for (int i = 0; i < hits.Length; i++)
                     {
-                        tower = h.GetComponentInParent<TowerBehaviour>();
+                        var h = hits[i]; if (h == null) continue;
+                        if (h.TryGetComponent<TowerBehaviour>(out var tb)) candidates.Add(tb); else {
+                            var tb2 = h.GetComponentInParent<TowerBehaviour>(); if (tb2 != null) candidates.Add(tb2);
+                        }
                     }
-                    if (tower != null && verboseSelection)
+                    if (candidates.Count > 0)
                     {
-                        Debug.Log($"[SelectionManager] Fallback collider matched tower via {h.name} (parent {tower.name}).");
+                        tower = PickNearest(candidates, world, out var src); if (verboseSelection && tower != null) Debug.Log($"[SelectionManager] Fallback nearest tower {tower.name} via {src?.name}");
                     }
                 }
             }
@@ -205,7 +332,8 @@ namespace BulletHeavenFortressDefense.Managers
                         float dx = pos.x - world.x;
                         float dy = pos.y - world.y;
                         float d2 = dx * dx + dy * dy;
-                        if (d2 < bestDistSq && d2 <= proximitySelectRadius * proximitySelectRadius)
+                        float proxR = proximitySelectRadius * (isTouch ? touchRadiusMult : 1f);
+                        if (d2 < bestDistSq && d2 <= proxR * proxR)
                         {
                             bestDistSq = d2;
                             best = t;
@@ -220,6 +348,29 @@ namespace BulletHeavenFortressDefense.Managers
                 else if (ultraVerbose)
                 {
                     Debug.Log($"[SelectionManager] Proximity fallback found no tower within {proximitySelectRadius}.");
+                }
+            }
+
+            // Last-chance immediate expansion for touch comfort (bigger circle) if still nothing
+            if (tower == null && isTouch && expandImmediateIfMiss)
+            {
+                float extraR = (fallbackRadius + proximitySelectRadius) * 0.5f * touchRadiusMult * 1.25f;
+                var hits = Physics2D.OverlapCircleAll(world, extraR, towerMask);
+                if (verboseSelection) Debug.Log($"[SelectionManager] Touch miss expansion radius={extraR:F2} hits={hits.Length}");
+                if (hits.Length > 0)
+                {
+                    var candidates = new System.Collections.Generic.List<TowerBehaviour>(hits.Length);
+                    for (int i = 0; i < hits.Length; i++)
+                    {
+                        var h = hits[i]; if (h == null) continue;
+                        if (h.TryGetComponent<TowerBehaviour>(out var tb)) candidates.Add(tb); else {
+                            var tb2 = h.GetComponentInParent<TowerBehaviour>(); if (tb2 != null) candidates.Add(tb2);
+                        }
+                    }
+                    if (candidates.Count > 0)
+                    {
+                        tower = PickNearest(candidates, world, out var src); if (verboseSelection && tower != null) Debug.Log($"[SelectionManager] Touch expanded capture nearest tower {tower.name} via {src?.name}");
+                    }
                 }
             }
 

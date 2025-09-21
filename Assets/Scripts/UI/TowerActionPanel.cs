@@ -16,6 +16,13 @@ namespace BulletHeavenFortressDefense.UI
         [SerializeField] private Text sellLabel;
         [SerializeField, Tooltip("Container for generated stat lines")] private RectTransform statsContainer;
         [SerializeField, Tooltip("Prototype or pooled stat line prefab (optional)")] private UpgradeStatLine statLinePrefab;
+    [Header("Stat Layout Tuning")] 
+    [SerializeField, Tooltip("Base relative font size factor (vs title font). 0.75 = 75% of title.")] private float baseFontScale = 0.75f;
+    [SerializeField, Tooltip("Minimum absolute font size for dense panels.")] private int minStatFontSize = 10;
+    [SerializeField, Tooltip("When entry count exceeds this, we start shrinking font further.")] private int shrinkThreshold = 6;
+    [SerializeField, Tooltip("Additional shrink per extra entry past threshold.")] private float shrinkPerExtra = 0.06f;
+    [SerializeField, Tooltip("Extra global shrink multiplier applied if tower is sniper (lots of stats, long numbers).")] private float sniperExtraShrink = 0.85f;
+    [SerializeField, Tooltip("Horizontal gap between the two stat columns.")] private float columnGap = 40f;
 
         private TowerBehaviour _selected;
         private TowerRangeVisualizer _rangeVis; // visual range circle while selected
@@ -102,9 +109,20 @@ namespace BulletHeavenFortressDefense.UI
             float nextDmg = dmg;
             if (canUp)
             {
+                // Base next-level damage (raw) – we manually apply any post-scaling identity multipliers
                 nextDmg = _selected.GetNextLevelDamage();
-                if (td != null && td.IsSlow) nextDmg *= td.SlowTowerDamageMultiplier;
-                if (td != null && td.IsSniper) nextDmg *= td.SniperDamageMultiplier;
+                if (td != null && td.IsSlow)
+                {
+                    // Slow tower UI already shows post-multiplied damage to match runtime RecalculateStats()
+                    nextDmg *= td.SlowTowerDamageMultiplier;
+                }
+                if (td != null && td.IsSniper)
+                {
+                    // CurrentDamage already includes SniperDamageMultiplier (applied in RecalculateStats).
+                    // GetNextLevelDamage returns the raw pre-identity-mult damage, so we must apply it ONCE here.
+                    // Previous implementation multiplied an already post-scaled base reference resulting in double scaling.
+                    nextDmg *= td.SniperDamageMultiplier;
+                }
             }
             float nextRng = _selected.GetNextLevelRange();
             float dps = dmg * fr;
@@ -146,8 +164,12 @@ namespace BulletHeavenFortressDefense.UI
                 }
                 if (td.IsSniper)
                 {
-                    int pierce = td.SniperPierceCount;
-                    string pierceLabel = pierce < 0 ? "∞" : (pierce == 0 ? "1" : (1 + pierce).ToString());
+                    int pierce = td.SniperPierceCount; // Interpreted as total hits ( -1 = infinite )
+                    string pierceLabel;
+                    if (pierce < 0)
+                        pierceLabel = "∞";
+                    else
+                        pierceLabel = Mathf.Max(1, pierce).ToString();
                     entries.Add(("Pierce", pierceLabel, pierceLabel, false));
                     float cc = td.SniperCritChance * 100f;
                     entries.Add(("Crit%", cc.ToString("F0"), cc.ToString("F0"), false));
@@ -158,19 +180,43 @@ namespace BulletHeavenFortressDefense.UI
             // Two column layout: left column gets first half (rounded up)
             int total = entries.Count;
             int leftCount = Mathf.CeilToInt(total / 2f);
-            // Create two column parents
-            var leftCol = new GameObject("ColLeft", typeof(RectTransform));
-            var leftRt = leftCol.GetComponent<RectTransform>(); leftRt.SetParent(statsContainer, false); leftRt.anchorMin = new Vector2(0f,1f); leftRt.anchorMax = new Vector2(0f,1f); leftRt.pivot = new Vector2(0f,1f);
-            var leftLayout = leftCol.AddComponent<VerticalLayoutGroup>(); leftLayout.spacing = 2f; leftLayout.childAlignment = TextAnchor.UpperLeft; leftLayout.childForceExpandWidth = false; leftLayout.childForceExpandHeight = false;
-            var leftLE = leftCol.AddComponent<LayoutElement>(); leftLE.preferredWidth = 560f;
+            // Layout parent (ensure has RectTransform size reference)
+            var containerWidth = statsContainer.rect.width <= 0 ? 1200f : statsContainer.rect.width; // fallback width
+            float colWidth = (containerWidth - columnGap) * 0.5f;
 
+            // Create left column
+            var leftCol = new GameObject("ColLeft", typeof(RectTransform));
+            var leftRt = leftCol.GetComponent<RectTransform>();
+            leftRt.SetParent(statsContainer, false);
+            leftRt.anchorMin = new Vector2(0f,1f); leftRt.anchorMax = new Vector2(0f,1f); leftRt.pivot = new Vector2(0f,1f);
+            leftRt.anchoredPosition = Vector2.zero;
+            var leftLayout = leftCol.AddComponent<VerticalLayoutGroup>(); leftLayout.spacing = 0f; leftLayout.childAlignment = TextAnchor.UpperLeft; leftLayout.childForceExpandWidth = false; leftLayout.childForceExpandHeight = false; leftLayout.padding = new RectOffset(0,0,0,0);
+            var leftLE = leftCol.AddComponent<LayoutElement>(); leftLE.preferredWidth = colWidth;
+
+            // Create right column
             var rightCol = new GameObject("ColRight", typeof(RectTransform));
-            var rightRt = rightCol.GetComponent<RectTransform>(); rightRt.SetParent(statsContainer, false); rightRt.anchorMin = new Vector2(0f,1f); rightRt.anchorMax = new Vector2(0f,1f); rightRt.pivot = new Vector2(0f,1f);
-            var rightLayout = rightCol.AddComponent<VerticalLayoutGroup>(); rightLayout.spacing = 2f; rightLayout.childAlignment = TextAnchor.UpperLeft; rightLayout.childForceExpandWidth = false; rightLayout.childForceExpandHeight = false;
-            var rightLE = rightCol.AddComponent<LayoutElement>(); rightLE.preferredWidth = 560f;
+            var rightRt = rightCol.GetComponent<RectTransform>();
+            rightRt.SetParent(statsContainer, false);
+            rightRt.anchorMin = new Vector2(0f,1f); rightRt.anchorMax = new Vector2(0f,1f); rightRt.pivot = new Vector2(0f,1f);
+            rightRt.anchoredPosition = new Vector2(colWidth + columnGap, 0f);
+            var rightLayout = rightCol.AddComponent<VerticalLayoutGroup>(); rightLayout.spacing = 0f; rightLayout.childAlignment = TextAnchor.UpperLeft; rightLayout.childForceExpandWidth = false; rightLayout.childForceExpandHeight = false; rightLayout.padding = new RectOffset(0,0,0,0);
+            var rightLE = rightCol.AddComponent<LayoutElement>(); rightLE.preferredWidth = colWidth;
 
             Font fnt = titleText != null ? titleText.font : Resources.GetBuiltinResource<Font>("Arial.ttf");
-            int baseSize = titleText != null ? Mathf.RoundToInt(titleText.fontSize * 0.75f) : 14;
+            // Compute adaptive font size
+            float scale = baseFontScale;
+            if (total > shrinkThreshold)
+            {
+                int extra = total - shrinkThreshold;
+                scale -= extra * shrinkPerExtra;
+            }
+            if (td != null && td.IsSniper)
+            {
+                scale *= sniperExtraShrink;
+            }
+            scale = Mathf.Clamp(scale, 0.45f, 1.2f);
+            int baseSize = titleText != null ? Mathf.RoundToInt(titleText.fontSize * scale) : 14;
+            if (baseSize < minStatFontSize) baseSize = minStatFontSize;
 
             UpgradeStatLine MakeLine(Transform parent)
             {

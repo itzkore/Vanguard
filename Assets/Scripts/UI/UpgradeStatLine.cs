@@ -50,6 +50,12 @@ namespace BulletHeavenFortressDefense.UI
         public void Configure(string label, string currentVal, string nextVal, bool changed, Font font, int fontSize)
         {
             EnsureBuilt(font, fontSize);
+            // Adjust spacing dynamically (smaller fonts => tighter spacing)
+            if (TryGetComponent<HorizontalLayoutGroup>(out var h))
+            {
+                float t = Mathf.InverseLerp(28f, 10f, fontSize); // 0 at big, 1 at tiny
+                h.spacing = Mathf.Lerp(6f, 2f, t);
+            }
 
             labelText.text = label + ":";
             currentValueText.text = currentVal;
