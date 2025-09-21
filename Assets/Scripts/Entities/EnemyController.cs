@@ -19,8 +19,8 @@ namespace BulletHeavenFortressDefense.Entities
         public event Action<float, float> HealthChanged;
 
         [SerializeField] private Rigidbody2D body;
-    [SerializeField] private float moveSpeed = 1.5f;
-    [SerializeField, Tooltip("Global multiplier applied to enemy base move speed.")] private float speedGlobalMultiplier = 2f;
+    [SerializeField] private float moveSpeed = 2.5f;
+    [SerializeField, Tooltip("Global multiplier applied to enemy base move speed.")] private float speedGlobalMultiplier = 2.5f;
         [SerializeField] private float contactDamage = 10f;
     [Header("Bounds")]
     [SerializeField, Tooltip("If true, prevent enemies from moving off the left side of the camera viewport.")] private bool clampLeftToViewport = true;

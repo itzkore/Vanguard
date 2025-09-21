@@ -30,6 +30,10 @@ namespace BulletHeavenFortressDefense.UI
         private Image _toastBackground;
         private Text _toastText;
         private Coroutine _toastRoutine;
+    // Wave completion announcement
+    private RectTransform _waveCompleteRoot;
+    private Text _waveCompleteText;
+    private Coroutine _waveCompleteRoutine;
 
         public static HUDController Instance
         {
@@ -67,6 +71,7 @@ namespace BulletHeavenFortressDefense.UI
             if (WaveManager.HasInstance)
             {
                 WaveManager.Instance.WaveStarted += OnWaveStarted;
+                WaveManager.Instance.WaveCompleted += OnWaveCompleted;
                 WaveManager.Instance.PhaseChanged += OnPhaseChanged;
                 WaveManager.Instance.PhaseTimerUpdated += OnPhaseTimerUpdated;
                 WaveManager.Instance.WaveStarted += _ => UpdateKills();
@@ -119,6 +124,7 @@ namespace BulletHeavenFortressDefense.UI
                 WaveManager.Instance.WaveStarted -= OnWaveStarted;
                 WaveManager.Instance.PhaseChanged -= OnPhaseChanged;
                 WaveManager.Instance.PhaseTimerUpdated -= OnPhaseTimerUpdated;
+                WaveManager.Instance.WaveCompleted -= OnWaveCompleted;
             }
         }
 
@@ -160,6 +166,85 @@ namespace BulletHeavenFortressDefense.UI
                     }
                 }
             }
+        }
+
+        private void OnWaveCompleted(int waveNumber)
+        {
+            ShowWaveCompleteAnnouncement(waveNumber);
+        }
+
+        private void ShowWaveCompleteAnnouncement(int waveNumber)
+        {
+            EnsureWaveCompleteUI();
+            if (_waveCompleteRoutine != null)
+            {
+                StopCoroutine(_waveCompleteRoutine);
+            }
+            _waveCompleteText.text = $"You made it through wave {waveNumber}";
+            _waveCompleteRoutine = StartCoroutine(WaveCompleteRoutine());
+        }
+
+        private System.Collections.IEnumerator WaveCompleteRoutine()
+        {
+            _waveCompleteRoot.gameObject.SetActive(true);
+            CanvasGroup cg = _waveCompleteRoot.GetComponent<CanvasGroup>();
+            if (cg == null) cg = _waveCompleteRoot.gameObject.AddComponent<CanvasGroup>();
+            cg.alpha = 0f;
+            _waveCompleteRoot.localScale = Vector3.one * 0.85f;
+            float fadeIn = 0.35f; float hold = 1.2f; float fadeOut = 0.5f;
+            float t = 0f;
+            while (t < fadeIn)
+            {
+                t += Time.unscaledDeltaTime;
+                float k = Mathf.Clamp01(t / fadeIn);
+                cg.alpha = k;
+                _waveCompleteRoot.localScale = Vector3.one * Mathf.SmoothStep(0.85f, 1f, k);
+                yield return null;
+            }
+            t = 0f;
+            while (t < hold)
+            {
+                t += Time.unscaledDeltaTime;
+                yield return null;
+            }
+            t = 0f;
+            while (t < fadeOut)
+            {
+                t += Time.unscaledDeltaTime;
+                float k = 1f - Mathf.Clamp01(t / fadeOut);
+                cg.alpha = k;
+                _waveCompleteRoot.localScale = Vector3.one * Mathf.Lerp(1f, 1.05f, 1f-k);
+                yield return null;
+            }
+            _waveCompleteRoot.gameObject.SetActive(false);
+            _waveCompleteRoutine = null;
+        }
+
+        private void EnsureWaveCompleteUI()
+        {
+            if (_waveCompleteRoot != null) return;
+            var canvas = GetComponentInParent<Canvas>();
+            Transform parent = canvas != null ? canvas.transform : this.transform;
+            var go = new GameObject("WaveCompleteText", typeof(RectTransform));
+            var rt = go.GetComponent<RectTransform>();
+            rt.SetParent(parent, false);
+            rt.anchorMin = new Vector2(0.5f,0.5f);
+            rt.anchorMax = new Vector2(0.5f,0.5f);
+            rt.pivot = new Vector2(0.5f,0.5f);
+            rt.anchoredPosition = new Vector2(0f, 40f);
+            rt.sizeDelta = new Vector2(900f, 120f);
+            _waveCompleteRoot = rt;
+            var txt = go.AddComponent<Text>();
+            txt.font = UIFontProvider.Get();
+            txt.alignment = TextAnchor.MiddleCenter;
+            txt.fontSize = Mathf.RoundToInt(HUDBootstrapper.PublishedFontBase * 0.9f);
+            txt.color = new Color(1f,1f,1f,0.95f);
+            txt.text = "";
+            // Outline / shadow for contrast
+            var outline = go.AddComponent<Outline>(); outline.effectColor = new Color(0f,0f,0f,0.9f); outline.effectDistance = new Vector2(2f,-2f);
+            var shadow = go.AddComponent<Shadow>(); shadow.effectColor = new Color(0f,0f,0f,0.5f); shadow.effectDistance = new Vector2(3f,-3f);
+            _waveCompleteText = txt;
+            go.SetActive(false);
         }
 
         private void AutoBindTexts()

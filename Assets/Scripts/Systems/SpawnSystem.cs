@@ -11,7 +11,7 @@ namespace BulletHeavenFortressDefense.Systems
         [SerializeField] private Transform[] enemySpawnPoints;
         [SerializeField] private Transform[] towerSpawnPoints;
         [Header("Dynamic Edge Spawning")]
-        [SerializeField, Tooltip("World X position to use when spawning along the right edge. If zero, uses main camera right viewport edge.")] private float rightEdgeWorldX = 0f;
+        [SerializeField, Tooltip("World X position to use when spawning along the right edge. If zero, uses main camera right viewport edge.")] private float rightEdgeWorldX = 25f;
         [SerializeField, Tooltip("Padding from top/bottom when picking a random Y along the right edge.")] private float verticalEdgePadding = 0.5f;
         [SerializeField, Tooltip("Check and avoid spawning overlapping other enemies when using right-edge spawn.")] private bool avoidOverlapOnRightEdge = true;
         [SerializeField, Tooltip("Radius for overlap checks when spawning along right edge.")] private float overlapCheckRadius = 0.22f;

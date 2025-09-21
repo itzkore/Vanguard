@@ -346,6 +346,10 @@ MonoBehaviour:
     prefab: {fileID: 8269017022640902989, guid: 6b4756aa626445343b91d40bb136a6c1, type: 3}
     size: 40
     expandable: 1
+  - id: projectiles_sniper
+    prefab: {fileID: 8269017022640902989, guid: f53b50014d7f5c047bd937d5c6ff1c89, type: 3}
+    size: 30
+    expandable: 1
 --- !u!114 &330902690
 MonoBehaviour:
   m_ObjectHideFlags: 0

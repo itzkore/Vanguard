@@ -6,9 +6,20 @@ namespace BulletHeavenFortressDefense.UI
 {
     public class MainMenuController : MonoBehaviour
     {
-    [SerializeField] private Canvas canvas;
-    [SerializeField] private Button startButton;
-    [SerializeField] private Image background;
+        [Header("Wiring (auto if empty)")] 
+        [SerializeField] private Canvas canvas;
+        [SerializeField] private Button startButton;
+        [SerializeField] private Image background;
+
+        [Header("Style")] 
+        [SerializeField] private Color backgroundColor = new Color(0.1f, 0.11f, 0.13f, 1f); // Anthracite
+        [SerializeField] private bool useNoiseBackground = true;
+        [SerializeField] private float fadeInDuration = 0.65f;
+    [SerializeField, Range(0f,1f)] private float overlayAlpha = 0.35f;
+
+    private CanvasGroup _canvasGroup;
+    private bool _built;
+    private bool _styled; // ensures we only style once per enable unless forced
 
         private void Awake()
         {
@@ -52,6 +63,13 @@ namespace BulletHeavenFortressDefense.UI
             if (canvas != null)
             {
                 canvas.gameObject.SetActive(shouldShow);
+                if (shouldShow && _canvasGroup != null)
+                {
+                    // Restart fade when returning to menu
+                    _canvasGroup.alpha = 0f;
+                    StopAllCoroutines();
+                    StartCoroutine(FadeInRoutine());
+                }
             }
             else
             {
@@ -61,7 +79,22 @@ namespace BulletHeavenFortressDefense.UI
 
         private void EnsureUI()
         {
-            if (canvas != null && startButton != null) return;
+            if (_built)
+            {
+                if (!_styled) ApplyStyling();
+                return;
+            }
+            if (canvas != null && startButton != null)
+            {
+                // Existing layout in scene (probably prefab) -> just restyle it.
+                _canvasGroup = canvas.GetComponent<CanvasGroup>();
+                if (_canvasGroup == null) _canvasGroup = canvas.gameObject.AddComponent<CanvasGroup>();
+                _canvasGroup.alpha = 0f;
+                ApplyStyling();
+                StartCoroutine(FadeInRoutine());
+                _built = true;
+                return;
+            }
 
             var rootGO = new GameObject("MainMenuCanvas", typeof(RectTransform));
             rootGO.layer = LayerMask.NameToLayer("UI");
@@ -76,7 +109,7 @@ namespace BulletHeavenFortressDefense.UI
 
             var font = BulletHeavenFortressDefense.UI.UIFontProvider.Get();
 
-            // Silver background covering the whole screen
+            // Background covering the whole screen
             var bgGO = new GameObject("Background", typeof(RectTransform));
             var bgRT = bgGO.GetComponent<RectTransform>();
             bgRT.SetParent(rootGO.transform, false);
@@ -85,7 +118,7 @@ namespace BulletHeavenFortressDefense.UI
             bgRT.offsetMin = Vector2.zero;
             bgRT.offsetMax = Vector2.zero;
             background = bgGO.AddComponent<Image>();
-            // If a user imported bgmenu.png, try to auto-load it (Assets/Art/bgmenu.png). Put it under Resources/Art for auto Resources.Load.
+            // Try user supplied sprite first
             var tex = Resources.Load<Sprite>("Art/bgmenu");
             if (tex != null)
             {
@@ -94,15 +127,30 @@ namespace BulletHeavenFortressDefense.UI
             }
             else
             {
-                background.color = new Color(0.78f, 0.78f, 0.82f, 1f); // soft fallback
+                background.color = backgroundColor;
             }
             background.raycastTarget = true; // block clicks to the game field
-            // Add FX component (creates smoke / flashes / glitch overlays)
-            if (bgGO.GetComponent<MainMenuBackgroundFX>() == null)
+            // Remove any existing flash FX if present (avoid startup flash)
+            var oldFx = bgGO.GetComponent<MainMenuBackgroundFX>();
+            if (oldFx != null) Destroy(oldFx);
+
+            // Optional noise overlay child (separate RawImage so we retain flat color base)
+            GameObject noiseGO = null;
+            if (useNoiseBackground)
             {
-                var fx = bgGO.AddComponent<MainMenuBackgroundFX>();
-                // Leave default serialized settings; user can tweak in inspector.
+                noiseGO = new GameObject("NoiseOverlay", typeof(RectTransform));
+                var nrt = noiseGO.GetComponent<RectTransform>();
+                nrt.SetParent(bgGO.transform, false);
+                nrt.anchorMin = Vector2.zero; nrt.anchorMax = Vector2.one; nrt.offsetMin = Vector2.zero; nrt.offsetMax = Vector2.zero;
+                var raw = noiseGO.AddComponent<UnityEngine.UI.RawImage>();
+                raw.color = new Color(1f,1f,1f, overlayAlpha);
+                var gen = noiseGO.AddComponent<TexturedBackgroundGenerator>();
+                gen.ApplyImmediately();
             }
+
+            // Fade group
+            _canvasGroup = rootGO.AddComponent<CanvasGroup>();
+            _canvasGroup.alpha = 0f;
 
             // Title
             var titleGO = new GameObject("Title", typeof(RectTransform));
@@ -127,9 +175,17 @@ namespace BulletHeavenFortressDefense.UI
             titleOutline.effectColor = new Color(0.15f, 0.18f, 0.22f, 0.5f);
             titleOutline.effectDistance = new Vector2(1.5f, -1.5f);
 
-            // Start button (retro analog look)
+            // Start button (dark sci‑fi look)
             var btnGO = CreateRetroButton(rootGO.transform, font, "START", new Vector2(0.5f, 0.5f), new Vector2(0, -40));
             startButton = btnGO.GetComponent<Button>();
+            if (startButton != null && startButton.GetComponent<AnimatedButton>() == null)
+            {
+                startButton.gameObject.AddComponent<AnimatedButton>();
+            }
+
+            StartCoroutine(FadeInRoutine());
+            _built = true;
+            _styled = true;
         }
 
         private GameObject CreateRetroButton(Transform parent, Font font, string label, Vector2 anchor, Vector2 offset)
@@ -142,9 +198,9 @@ namespace BulletHeavenFortressDefense.UI
             ort.anchoredPosition = offset; ort.sizeDelta = new Vector2(320, 90);
 
             var outerImg = outer.AddComponent<Image>();
-            outerImg.color = new Color(0.55f, 0.57f, 0.60f, 1f); // brushed metal frame
+            outerImg.color = new Color(0.18f, 0.20f, 0.24f, 1f); // dark frame
             var outerOutline = outer.AddComponent<Outline>();
-            outerOutline.effectColor = new Color(0.3f, 0.33f, 0.36f, 1f);
+            outerOutline.effectColor = new Color(0.05f, 0.06f, 0.07f, 1f);
             outerOutline.effectDistance = new Vector2(2f, -2f);
 
             // Inner plate
@@ -155,7 +211,7 @@ namespace BulletHeavenFortressDefense.UI
             irt.offsetMin = new Vector2(10, 10); irt.offsetMax = new Vector2(-10, -10);
 
             var innerImg = inner.AddComponent<Image>();
-            innerImg.color = new Color(0.82f, 0.83f, 0.86f, 1f); // lighter silver
+            innerImg.color = new Color(0.28f, 0.30f, 0.35f, 1f); // inner panel
             var innerShadow = inner.AddComponent<Shadow>();
             innerShadow.effectColor = new Color(0f, 0f, 0f, 0.35f);
             innerShadow.effectDistance = new Vector2(2f, -2f);
@@ -164,8 +220,8 @@ namespace BulletHeavenFortressDefense.UI
             var button = inner.AddComponent<Button>();
             var colors = button.colors;
             colors.normalColor = innerImg.color;
-            colors.highlightedColor = new Color(0.88f, 0.89f, 0.92f, 1f);
-            colors.pressedColor = new Color(0.74f, 0.75f, 0.78f, 1f);
+            colors.highlightedColor = new Color(0.34f, 0.37f, 0.43f, 1f);
+            colors.pressedColor = new Color(0.22f, 0.24f, 0.28f, 1f);
             colors.selectedColor = colors.highlightedColor;
             colors.disabledColor = new Color(0.6f, 0.6f, 0.6f, 1f);
             button.colors = colors;
@@ -175,12 +231,128 @@ namespace BulletHeavenFortressDefense.UI
             trt.SetParent(inner.transform, false);
             trt.anchorMin = Vector2.zero; trt.anchorMax = Vector2.one; trt.offsetMin = Vector2.zero; trt.offsetMax = Vector2.zero;
             var text = textGO.AddComponent<Text>();
-            text.font = font; text.text = label; text.alignment = TextAnchor.MiddleCenter; text.color = new Color(0.1f, 0.12f, 0.15f, 1f); text.fontSize = 36;
+            text.font = font; text.text = label; text.alignment = TextAnchor.MiddleCenter; text.color = new Color(0.88f, 0.91f, 0.97f, 1f); text.fontSize = 38;
             var txtShadow = textGO.AddComponent<Shadow>();
-            txtShadow.effectColor = new Color(1f, 1f, 1f, 0.25f);
-            txtShadow.effectDistance = new Vector2(-1f, 1f);
+            txtShadow.effectColor = new Color(0f, 0f, 0f, 0.6f);
+            txtShadow.effectDistance = new Vector2(2f, -2f);
 
             return inner; // return the clickable element with Button component
         }
+
+        private System.Collections.IEnumerator FadeInRoutine()
+        {
+            if (_canvasGroup == null) yield break;
+            float t = 0f;
+            while (t < fadeInDuration)
+            {
+                t += Time.unscaledDeltaTime;
+                float a = Mathf.Clamp01(t / fadeInDuration);
+                _canvasGroup.alpha = a;
+                yield return null;
+            }
+            _canvasGroup.alpha = 1f;
+        }
+
+        private void ApplyStyling()
+        {
+            if (_styled) return;
+
+            // Background restyle (even if it already existed)
+            if (background == null && canvas != null)
+            {
+                var existingBg = canvas.transform.Find("Background");
+                if (existingBg != null) background = existingBg.GetComponent<Image>();
+            }
+            if (background != null)
+            {
+                if (background.sprite == null || ApproximatelyOldSilver(background.color))
+                    background.color = backgroundColor;
+                var oldFx = background.GetComponent<MainMenuBackgroundFX>();
+                if (oldFx != null) DestroyImmediate(oldFx);
+
+                // Ensure overlay child exists / updated
+                var existingOverlay = background.transform.Find("NoiseOverlay");
+                if (useNoiseBackground)
+                {
+                    if (existingOverlay == null)
+                    {
+                        var noiseGO = new GameObject("NoiseOverlay", typeof(RectTransform));
+                        var nrt = noiseGO.GetComponent<RectTransform>();
+                        nrt.SetParent(background.transform, false);
+                        nrt.anchorMin = Vector2.zero; nrt.anchorMax = Vector2.one; nrt.offsetMin = Vector2.zero; nrt.offsetMax = Vector2.zero;
+                        var raw = noiseGO.AddComponent<UnityEngine.UI.RawImage>();
+                        raw.color = new Color(1f,1f,1f, overlayAlpha);
+                        var gen = noiseGO.AddComponent<TexturedBackgroundGenerator>();
+                        gen.ApplyImmediately();
+                    }
+                    else
+                    {
+                        var raw = existingOverlay.GetComponent<UnityEngine.UI.RawImage>();
+                        if (raw != null) raw.color = new Color(1f,1f,1f, overlayAlpha);
+                    }
+                }
+                else if (existingOverlay != null)
+                {
+                    existingOverlay.gameObject.SetActive(false);
+                }
+            }
+
+            // Button restyle
+            if (startButton == null && canvas != null)
+            {
+                // Try to find a START button
+                var btn = canvas.GetComponentInChildren<Button>(true);
+                if (btn != null && btn.name.ToLower().Contains("start")) startButton = btn;
+            }
+            if (startButton != null)
+            {
+                if (startButton.GetComponent<AnimatedButton>() == null)
+                    startButton.gameObject.AddComponent<AnimatedButton>();
+
+                // Inner image is on same GameObject we returned from CreateRetroButton (Button component host)
+                var innerImg = startButton.GetComponent<Image>();
+                if (innerImg != null && ApproximatelyOldButtonSilver(innerImg.color))
+                {
+                    innerImg.color = new Color(0.28f, 0.30f, 0.35f, 1f);
+                    var colors = startButton.colors;
+                    colors.normalColor = innerImg.color;
+                    colors.highlightedColor = new Color(0.34f, 0.37f, 0.43f, 1f);
+                    colors.pressedColor = new Color(0.22f, 0.24f, 0.28f, 1f);
+                    colors.selectedColor = colors.highlightedColor;
+                    startButton.colors = colors;
+                }
+
+                // Text child
+                var txt = startButton.GetComponentInChildren<Text>(true);
+                if (txt != null && txt.color.r < 0.5f) // old dark text -> make light
+                {
+                    txt.color = new Color(0.88f, 0.91f, 0.97f, 1f);
+                }
+            }
+
+            _styled = true;
+        }
+
+        private bool ApproximatelyOldSilver(Color c)
+        {
+            // Old fallback ~0.78 grey
+            return Mathf.Abs(c.r - 0.78f) < 0.06f && Mathf.Abs(c.g - 0.78f) < 0.06f && Mathf.Abs(c.b - 0.82f) < 0.08f;
+        }
+        private bool ApproximatelyOldButtonSilver(Color c)
+        {
+            // Old inner button ~0.82 grey
+            return c.r > 0.7f && c.g > 0.7f && c.b > 0.75f;
+        }
+
+#if UNITY_EDITOR
+        private void OnValidate()
+        {
+            if (!Application.isPlaying)
+            {
+                // Allow instant preview when tweaking in Inspector
+                ApplyStyling();
+            }
+        }
+#endif
     }
 }

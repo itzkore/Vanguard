@@ -30,6 +30,10 @@ namespace BulletHeavenFortressDefense.Managers
     [SerializeField, Tooltip("Block panning when pointer is over UI.")] private bool blockPanningWhenPointerOverUI = false;
     [SerializeField, Tooltip("Panning multiplier (1 = 1 world unit per world unit/pixel factor)." )] private float panSpeedPerPixel = 1.0f;
     [SerializeField, Tooltip("Smooth damping for camera position.")] private float panSmoothing = 18f;
+    [SerializeField, Tooltip("Extra horizontal world space allowed to the right beyond baseline when panning (lets player look ahead).")] private float extraRightPanSpace = 10f;
+    [SerializeField, Tooltip("How strongly panning is scaled by zoomFactor (0 = no scaling, 1 = linear, 0.5 = sqrt). 0 means full pan range even at max zoom-out.")] private float panZoomScalePower = 0.35f;
+    [SerializeField, Tooltip("Keyboard pan speed in world units per second at default zoom.")] private float keyboardPanSpeed = 12f;
+    [SerializeField, Tooltip("Scale keyboard pan speed by current zoomFactor (so fully zoomed out moves less). 0 = no scaling, 1 = linear, etc.")] private float keyboardPanZoomPower = 0.5f;
     // Removed unused panBorderExtra (previously intended for overscroll) to eliminate CS0414 warning.
 
     private float _targetSize;
@@ -88,70 +92,40 @@ namespace BulletHeavenFortressDefense.Managers
 
             float size = _targetSize;
 
-            // Mouse wheel (Input System if available, fallback to legacy)
-            float wheel = 0f;
-            if (Mouse.current != null)
-            {
-                // Typically positive when scrolling up, negative when down
-                wheel = Mouse.current.scroll.ReadValue().y / 120f; // normalize notches (~120 per notch on Windows)
-            }
-            else
-            {
-                wheel = Input.mouseScrollDelta.y;
-            }
+            // --- Zoom Input Handling ---
 
-            if (Mathf.Abs(wheel) > 0.0001f)
-            {
-                if (!blockZoomWhenPointerOverUI || !IsPointerOverUI())
-                {
-                    size -= wheel * wheelZoomSpeed;
-                }
-            }
+            // If pointer is over UI, optionally block zoom
+            bool pointerOverUI = blockZoomWhenPointerOverUI && EventSystem.current != null && EventSystem.current.IsPointerOverGameObject();
 
-            // Pinch zoom using Input System touch if available; fallback to legacy if needed
-            var touchscreen = Touchscreen.current;
-            if (touchscreen != null)
+            if (!pointerOverUI)
             {
-                int active = 0;
-                Vector2 p0 = default, p1 = default;
-                foreach (var t in touchscreen.touches)
+                // Mouse wheel (Input System if available, fallback to legacy)
+                float wheel = 0f;
+                if (Mouse.current != null)
                 {
-                    if (t.press.isPressed)
-                    {
-                        if (active == 0) p0 = t.position.ReadValue();
-                        else if (active == 1) p1 = t.position.ReadValue();
-                        active++;
-                        if (active >= 2) break;
-                    }
-                }
-                if (active >= 2)
-                {
-                    float dist = Vector2.Distance(p0, p1);
-                    if (_pinching)
-                    {
-                        float delta = dist - _prevPinchDistance;
-                        size -= delta * pinchZoomSpeed;
-                    }
-                    _prevPinchDistance = dist;
-                    _pinching = true;
+                    // Typically positive when scrolling up, negative when down
+                    wheel = Mouse.current.scroll.ReadValue().y / 120f; // normalize notches (~120 per notch on Windows)
                 }
                 else
                 {
-                    _pinching = false;
+                    wheel = Input.mouseScrollDelta.y;
                 }
-            }
-            else
-            {
-                // Legacy pinch (if old input is enabled)
-                if (Input.touchCount >= 2)
+
+                if (Mathf.Abs(wheel) > 0.01f)
                 {
-                    var t0 = Input.GetTouch(0);
-                    var t1 = Input.GetTouch(1);
-                    float dist = Vector2.Distance(t0.position, t1.position);
+                    // Adjust target size based on scroll, moving away from current size
+                    _targetSize = Mathf.Clamp(_targetSize - wheel * wheelZoomSpeed, minOrthoSize, maxOrthoSize);
+                }
+
+                // Pinch gesture for touch screens
+                if (Touchscreen.current != null && Touchscreen.current.touches.Count == 2)
+                {
+                    var touches = Touchscreen.current.touches;
+                    float dist = Vector2.Distance(touches[0].position.ReadValue(), touches[1].position.ReadValue());
                     if (_pinching)
                     {
                         float delta = dist - _prevPinchDistance;
-                        size -= delta * pinchZoomSpeed;
+                        _targetSize -= delta * pinchZoomSpeed;
                     }
                     _prevPinchDistance = dist;
                     _pinching = true;
@@ -163,8 +137,7 @@ namespace BulletHeavenFortressDefense.Managers
             }
 
             // Clamp to configured min/max (now supports extended zoom out) 
-            size = Mathf.Clamp(size, minOrthoSize, maxOrthoSize);
-            _targetSize = size;
+            _targetSize = Mathf.Clamp(_targetSize, minOrthoSize, maxOrthoSize);
 
             // Smooth toward target size
             float k = 1f - Mathf.Exp(-Mathf.Max(0f, smoothing) * Time.unscaledDeltaTime);
@@ -173,8 +146,9 @@ namespace BulletHeavenFortressDefense.Managers
             // Zoom factor relative to current min->max range (0 = max zoom out, 1 = max zoom in)
             float zoomFactor = Mathf.InverseLerp(maxOrthoSize, minOrthoSize, _targetSize);
 
-            // Handle panning only while zoomed in (some margin to avoid tiny jitter near default)
-            if (enablePanning && _targetSize < _defaultSize - 0.0001f)
+            // Handle panning when sufficiently zoomed in from full extent using zoomFactor threshold
+            // Always allow panning if enabled (no zoom restriction)
+            if (enablePanning)
             {
                 HandlePanning();
             }
@@ -186,21 +160,18 @@ namespace BulletHeavenFortressDefense.Managers
             // Calculate rightward center shift to maintain left boundary rule
             Vector3 adjustedCenter = CalculateZoomAdjustedCenter(_targetSize);
 
-            // Recompute target position from pan offset scaled by zoomFactor
-            if (Mathf.Approximately(_targetSize, maxOrthoSize) || zoomFactor <= 0.001f) // fully zoomed out -> recenter
+            // Recompute target position from pan offset; apply optional scaling by zoomFactor^power
+            float panScale = 1f;
+            if (panZoomScalePower > 0f)
             {
-                _panOffset = Vector3.zero; // clear stored offset
-                _targetPos = adjustedCenter;
-                targetCamera.transform.position = adjustedCenter; // instant snap
+                // zoomFactor=0 at max out -> minimal scale if power>0; if power=0 -> always 1
+                panScale = Mathf.Pow(Mathf.Clamp01(zoomFactor), panZoomScalePower);
             }
-            else
-            {
-                _targetPos = adjustedCenter + _panOffset * zoomFactor;
-                _targetPos = ClampToPanBounds(_targetPos);
-                // Smooth move toward target position
-                float kp = 1f - Mathf.Exp(-Mathf.Max(0f, panSmoothing) * Time.unscaledDeltaTime);
-                targetCamera.transform.position = Vector3.Lerp(targetCamera.transform.position, _targetPos, kp);
-            }
+            _targetPos = adjustedCenter + _panOffset * panScale;
+            _targetPos = ClampToPanBounds(_targetPos);
+            // Smooth move toward target position
+            float kp = 1f - Mathf.Exp(-Mathf.Max(0f, panSmoothing) * Time.unscaledDeltaTime);
+            targetCamera.transform.position = Vector3.Lerp(targetCamera.transform.position, _targetPos, kp);
         }
 
         private bool IsPointerOverUI()
@@ -219,6 +190,39 @@ namespace BulletHeavenFortressDefense.Managers
 
             bool moved = false;
             Vector2 curPointer = Vector2.zero;
+
+            // --- Keyboard panning ---
+            if (enablePanning)
+            {
+                Vector2 keyDir = Vector2.zero;
+                if (Keyboard.current != null)
+                {
+                    if (Keyboard.current.leftArrowKey.isPressed || Keyboard.current.aKey.isPressed) keyDir.x -= 1f;
+                    if (Keyboard.current.rightArrowKey.isPressed || Keyboard.current.dKey.isPressed) keyDir.x += 1f;
+                    if (Keyboard.current.upArrowKey.isPressed || Keyboard.current.wKey.isPressed) keyDir.y += 1f;
+                    if (Keyboard.current.downArrowKey.isPressed || Keyboard.current.sKey.isPressed) keyDir.y -= 1f;
+                }
+                else
+                {
+                    // Legacy Input fallback (optional)
+                    float lx = 0f, ly = 0f;
+                    if (Input.GetKey(KeyCode.LeftArrow) || Input.GetKey(KeyCode.A)) lx -= 1f;
+                    if (Input.GetKey(KeyCode.RightArrow) || Input.GetKey(KeyCode.D)) lx += 1f;
+                    if (Input.GetKey(KeyCode.UpArrow) || Input.GetKey(KeyCode.W)) ly += 1f;
+                    if (Input.GetKey(KeyCode.DownArrow) || Input.GetKey(KeyCode.S)) ly -= 1f;
+                    keyDir = new Vector2(lx, ly);
+                }
+                if (keyDir.sqrMagnitude > 0.0001f)
+                {
+                    keyDir.Normalize();
+                    // derive zoom factor (0..1) from current camera size
+                    float zf = Mathf.InverseLerp(maxOrthoSize, minOrthoSize, _targetSize);
+                    float zScale = keyboardPanZoomPower > 0f ? Mathf.Pow(Mathf.Clamp01(zf), keyboardPanZoomPower) : 1f;
+                    float speed = keyboardPanSpeed * zScale * Time.unscaledDeltaTime;
+                    _panOffset += new Vector3(keyDir.x, keyDir.y, 0f) * speed;
+                    moved = true;
+                }
+            }
 
             if (Mouse.current != null)
             {
@@ -306,6 +310,8 @@ namespace BulletHeavenFortressDefense.Managers
             float unitsPerPixel = (targetCamera.orthographicSize * 2f) / Mathf.Max(1f, Screen.height);
             Vector2 worldDelta = -screenDelta * unitsPerPixel * Mathf.Max(0.0001f, panSpeedPerPixel);
             _panOffset += new Vector3(worldDelta.x, worldDelta.y, 0f);
+            // Prevent panning left past baseline (never reveal area left of fortress baseline)
+            if (_panOffset.x < 0f) _panOffset.x = 0f;
         }
 
         private Vector3 ClampToPanBounds(Vector3 desired)
@@ -321,7 +327,12 @@ namespace BulletHeavenFortressDefense.Managers
             // Keep the entire current view inside the default viewport: clamp camera center so edges don't cross
             Vector3 center = new Vector3(_baselineCenter.x, _baselineCenter.y, z);
             float minX = center.x - (halfWDefault - halfWCurrent);
-            float maxX = center.x + (halfWDefault - halfWCurrent);
+            float maxX = center.x + (halfWDefault - halfWCurrent) + Mathf.Max(0f, extraRightPanSpace);
+            // Enforce left boundary: never show space left of the original left edge => clamp minX to that exact value
+            // Original left edge = baselineCenter.x - defaultHalfWidth
+            float fortressLeftEdge = _baselineCenter.x - (_defaultSize * targetCamera.aspect);
+            // Because minX already ensures current view stays within default view, we additionally ensure pan offset cannot push center further left
+            minX = Mathf.Max(minX, fortressLeftEdge + halfWCurrent); // effectively redundant safeguard
             float minY = center.y - (halfHDefault - halfHCurrent);
             float maxY = center.y + (halfHDefault - halfHCurrent);
 
@@ -367,20 +378,12 @@ namespace BulletHeavenFortressDefense.Managers
         /// </summary>
         private Vector3 CalculateZoomAdjustedCenter(float currentOrthoSize)
         {
-            // When zooming out from default size, we need to shift camera right 
-            // so that the left edge of the viewport stays at the same world position
-            
-            // At default size, left edge of viewport is at: _baselineCenter.x - (defaultHalfWidth)
-            // At current size, left edge would be at: adjustedCenter.x - (currentHalfWidth)
-            // We want these to be equal, so: adjustedCenter.x = _baselineCenter.x + (currentHalfWidth - defaultHalfWidth)
-            
+            // Adaptive shift: maintain constant world position for left edge of viewport when zooming.
             float defaultHalfWidth = _defaultSize * targetCamera.aspect;
             float currentHalfWidth = currentOrthoSize * targetCamera.aspect;
             float rightwardShift = currentHalfWidth - defaultHalfWidth;
-            
             Vector3 adjustedCenter = _baselineCenter;
-            adjustedCenter.x += rightwardShift;
-            
+            adjustedCenter.x += rightwardShift; // only moves right when zooming out
             return adjustedCenter;
         }
     }

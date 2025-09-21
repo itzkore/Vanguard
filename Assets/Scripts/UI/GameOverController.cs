@@ -68,7 +68,12 @@ namespace BulletHeavenFortressDefense.UI
                 // Prefer last run captured kills (TotalKills may already be 0 if sequence stopped)
                 kills = WaveManager.Instance.LastRunKills > 0 ? WaveManager.Instance.LastRunKills : WaveManager.Instance.TotalKills;
                 best = WaveManager.Instance.BestRunKills;
-                wave = WaveManager.Instance.CurrentWaveNumber;
+                // Show the last COMPLETED wave number. If player dies during wave N, CurrentWaveNumber==N, but they completed N-1.
+                int current = WaveManager.Instance.CurrentWaveNumber;
+                // If enemies still remain or phase is Combat, treat last completed as current-1 (never below 0)
+                int lastCompleted = Mathf.Max(0, current - 1);
+                // If they actually reached current wave start (>=1), show at least 1.
+                wave = lastCompleted;
             }
             if (titleText != null) titleText.text = "Game Over";
             if (statsText != null) statsText.text = $"Kills: {kills}\nBest: {best}\nWave: {wave}";
