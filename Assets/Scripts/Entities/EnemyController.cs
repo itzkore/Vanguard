@@ -64,6 +64,17 @@ namespace BulletHeavenFortressDefense.Entities
     private float _lastHitFxTime = -999f;
     private static GameObject _fallbackHitFxPrefab;   // lazily built simple particle system if no prefab provided
     private static GameObject _fallbackDeathFxPrefab; // larger burst variant
+        // --- Variant Runtime State ---
+        private EnemyVariant _variant = EnemyVariant.Base;
+        private float _variantHealthMult = 1f;
+        private float _variantSpeedMult = 1f;
+        private float _variantRewardMult = 1f;
+        private float _variantContactDamageMult = 1f;
+        private float _variantScaleMult = 1f;
+        private Vector3 _originalScale;
+        private bool _capturedOriginalVisuals;
+        private struct OriginalSpriteColor { public SpriteRenderer r; public Color c; }
+        private List<OriginalSpriteColor> _originalSpriteColors = new();
 
         public static IReadOnlyList<EnemyController> ActiveEnemies => _activeEnemies;
         public bool IsAlive => _currentHealth > 0f;
@@ -152,6 +163,32 @@ namespace BulletHeavenFortressDefense.Entities
                     var c = r.color; c.a = 1f; r.color = c;
                     if (r.sortingOrder < 2) r.sortingOrder = 2; // render above walls (0) and core (1)
                 }
+                // Capture original colors (once) after resetting alpha & sorting
+                if (!_capturedOriginalVisuals)
+                {
+                    _originalSpriteColors.Clear();
+                    for (int i = 0; i < renderers.Length; i++)
+                    {
+                        var r = renderers[i]; if (r == null) continue;
+                        _originalSpriteColors.Add(new OriginalSpriteColor{ r = r, c = r.color });
+                    }
+                    _capturedOriginalVisuals = true;
+                }
+            }
+            if (_originalScale == Vector3.zero) _originalScale = transform.localScale;
+
+            // Reset variant runtime state for pooled reuse
+            _variant = EnemyVariant.Base;
+            _variantHealthMult = 1f;
+            _variantSpeedMult = 1f;
+            _variantRewardMult = 1f;
+            _variantContactDamageMult = 1f;
+            _variantScaleMult = 1f;
+            transform.localScale = _originalScale;
+            // Restore original sprite colors (remove tint)
+            for (int i = 0; i < _originalSpriteColors.Count; i++)
+            {
+                var os = _originalSpriteColors[i]; if (os.r != null) os.r.color = os.c;
             }
 
             // Ensure tiny health bar widget exists and is synced
@@ -177,6 +214,8 @@ namespace BulletHeavenFortressDefense.Entities
             float hp = rapidLevel1Damage * baseFactor;
             float waveMult = BulletHeavenFortressDefense.Balance.BalanceConfig.GetEnemyHpMultiplierForWave(waveNumber);
             hp *= waveMult;
+            // Apply variant health multiplier at the end so variant scales final balanced HP
+            hp *= Mathf.Max(0.05f, _variantHealthMult);
             _maxHealthOverride = hp;
             _currentHealth = hp;
             NotifyHealthChanged();
@@ -216,7 +255,8 @@ namespace BulletHeavenFortressDefense.Entities
             bool inMelee = EvaluateMeleeState(out _meleeTarget);
             if (!wallAhead && !inMelee)
             {
-                float speed = _baseMoveSpeed * Mathf.Max(0.05f, _speedMultiplier);
+                // Incorporate variant speed multiplier (was previously ignored by movement loop)
+                float speed = _baseMoveSpeed * _variantSpeedMult * Mathf.Max(0.05f, _speedMultiplier);
                 Vector2 desiredDir = Vector2.left;
                 if (steerToNearestWall)
                 {
@@ -737,13 +777,65 @@ namespace BulletHeavenFortressDefense.Entities
         {
             if (Systems.EconomySystem.HasInstance)
             {
-                Systems.EconomySystem.Instance.AddKillReward(_data != null ? _data.Reward : 0);
+                int baseReward = _data != null ? _data.Reward : 0;
+                float finalReward = baseReward * Mathf.Max(0f, _variantRewardMult);
+                Systems.EconomySystem.Instance.AddKillReward(Mathf.RoundToInt(finalReward));
             }
             // Death blood burst (use larger FX)
             SpawnDeathBloodFx();
             // Notify listeners that this enemy has been defeated
             try { EnemyDefeated?.Invoke(this); } catch { }
             Despawn();
+        }
+        
+        /// <summary>
+        /// Apply a variant rule (called once right after Initialize and before / or after balance overrides).
+        /// If called before ApplyBalanceOverrides, health scaling is deferred until overrides are applied (via stored multiplier).
+        /// If called after overrides, we immediately scale current/max health.
+        /// </summary>
+        public void ApplyVariant(EnemyVariantRule rule)
+        {
+            _variant = rule.variant;
+            _variantHealthMult = Mathf.Max(0.05f, rule.healthMult <= 0f ? 1f : rule.healthMult);
+            _variantSpeedMult = Mathf.Max(0.05f, rule.speedMult <= 0f ? 1f : rule.speedMult);
+            _variantRewardMult = Mathf.Max(0.05f, rule.rewardMult <= 0f ? 1f : rule.rewardMult);
+            _variantContactDamageMult = Mathf.Max(0.05f, rule.contactDamageMult <= 0f ? 1f : rule.contactDamageMult);
+            _variantScaleMult = Mathf.Max(0.05f, rule.scaleMult <= 0f ? 1f : rule.scaleMult);
+
+            // Apply movement & contact damage scaling immediately
+            moveSpeed = _baseMoveSpeed * _variantSpeedMult;
+            contactDamage = (_data != null ? Mathf.Max(0f, _data.ContactDamage) : contactDamage) * _variantContactDamageMult;
+
+            // Apply visual scale
+            if (_originalScale == Vector3.zero) _originalScale = transform.localScale;
+            transform.localScale = _originalScale * _variantScaleMult;
+
+            // Tint (only if tint has visible alpha > 0 or non-default color); alpha is ignored except as a flag
+            if (rule.tint.a > 0f || (rule.tint.r + rule.tint.g + rule.tint.b) > 0.01f)
+            {
+                for (int i = 0; i < _originalSpriteColors.Count; i++)
+                {
+                    var os = _originalSpriteColors[i]; if (os.r == null) continue;
+                    Color baseCol = os.c; // original color
+                    // Multiply base color by tint (preserve original alpha)
+                    Color tinted = new Color(baseCol.r * rule.tint.r, baseCol.g * rule.tint.g, baseCol.b * rule.tint.b, baseCol.a);
+                    os.r.color = tinted;
+                }
+            }
+
+            // If balance overrides already applied, scale current/max now; else deferred via multiplier in ApplyBalanceOverrides
+            if (_maxHealthOverride > 0f)
+            {
+                _maxHealthOverride *= _variantHealthMult;
+                _currentHealth = _maxHealthOverride;
+                NotifyHealthChanged();
+            }
+            else
+            {
+                // No override yet → scale base health now so partial damage events pre-override are consistent (unlikely scenario)
+                _currentHealth *= _variantHealthMult;
+                NotifyHealthChanged();
+            }
         }
         private void Despawn()
         {

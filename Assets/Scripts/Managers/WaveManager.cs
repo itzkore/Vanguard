@@ -83,6 +83,9 @@ namespace BulletHeavenFortressDefense.Managers
     [SerializeField, Tooltip("Maximum enemies spawned in a single frame when throttling a large entry.")] private int maxEnemySpawnsPerFrame = 20;
     [SerializeField, Tooltip("Optional safety cap: even during throttling if spawnInterval > 0 it already yields; so we only throttle zero-interval bursts.")] private bool throttleOnlyWhenNoInterval = true;
     [SerializeField, Tooltip("Verbose logs for progressive throttling decisions.")] private bool verboseProgressiveLogs = false;
+    [Header("Enemy Variants")] 
+    [SerializeField, Tooltip("Variant configuration (weights & multipliers). Leave null to disable variants.")] private EnemyVariantConfig variantConfig;
+    [SerializeField, Tooltip("If true, logs each enemy variant chosen (for debugging).")] private bool logVariantSpawns = false;
 
         private readonly HashSet<int> _activeWaveEnemyIds = new();
 
@@ -181,6 +184,26 @@ namespace BulletHeavenFortressDefense.Managers
             if (waveSequence == null)
             {
                 waveSequence = ScriptableObject.CreateInstance<WaveSequence>();
+            }
+
+            if (variantConfig != null)
+            {
+                var rules = variantConfig.Rules;
+                if (rules == null || rules.Length == 0)
+                {
+                    Debug.LogWarning("[WaveManager][Variants] VariantConfig assigned but contains ZERO rules. Only Base variant will spawn. Populate the 'rules' array in EnemyVariantConfig asset.");
+                }
+                else if (logVariantSpawns)
+                {
+                    System.Text.StringBuilder sb = new System.Text.StringBuilder();
+                    sb.Append("[WaveManager][Variants] Rules summary (wave start):\n");
+                    for (int i = 0; i < rules.Length; i++)
+                    {
+                        var r = rules[i];
+                        sb.Append($" - {r.variant} weight={r.spawnWeight} minWave={r.minWave} hpMult={r.healthMult} spdMult={r.speedMult} scale={r.scaleMult}\n");
+                    }
+                    Debug.Log(sb.ToString());
+                }
             }
 
             if (cloneWavesAtRuntime)
@@ -596,6 +619,7 @@ namespace BulletHeavenFortressDefense.Managers
         {
             if (enemy == null) return;
             _activeWaveEnemyIds.Add(enemy.GetInstanceID());
+            ApplyVariantIfConfigured(enemy);
             enemy.ApplyBalanceOverrides(_rapidBaseDamage, CurrentWaveNumber);
         }
 
@@ -603,6 +627,7 @@ namespace BulletHeavenFortressDefense.Managers
         {
             if (enemy == null) return;
             _activeWaveEnemyIds.Add(enemy.GetInstanceID());
+            ApplyVariantIfConfigured(enemy);
             enemy.ApplyBalanceOverrides(_rapidBaseDamage, CurrentWaveNumber);
         }
 
@@ -1086,6 +1111,7 @@ namespace BulletHeavenFortressDefense.Managers
                         {
                             _activeWaveEnemyIds.Add(enemy.GetInstanceID());
                             spawned++;
+                            ApplyVariantIfConfigured(enemy);
                             enemy.ApplyBalanceOverrides(_rapidBaseDamage, CurrentWaveNumber);
                         }
 
@@ -1197,8 +1223,14 @@ namespace BulletHeavenFortressDefense.Managers
                         {
                             _activeWaveEnemyIds.Add(enemy.GetInstanceID());
                             spawned++;
+                            ApplyVariantIfConfigured(enemy);
+                            enemy.ApplyBalanceOverrides(_rapidBaseDamage, CurrentWaveNumber);
                         }
 
+                        if (!bufferThisEntryLane && enemy == null)
+                        {
+                            // nothing spawned this iteration
+                        }
                         if (!bufferThisEntryLane)
                         {
                             float wait = entry.spawnInterval;
@@ -1310,8 +1342,25 @@ namespace BulletHeavenFortressDefense.Managers
             {
                 Debug.LogWarning("WaveManager: Failed to spawn enemy.", this);
             }
+            else
+            {
+                // For helper spawns invoked directly (not part of main enumerator paths) ensure variant applied before overrides elsewhere.
+                ApplyVariantIfConfigured(enemy);
+            }
 
             return enemy;
+        }
+
+        private void ApplyVariantIfConfigured(EnemyController enemy)
+        {
+            if (enemy == null || variantConfig == null) return;
+            var rule = variantConfig.GetWeightedRandomRule(CurrentWaveNumber);
+            // Always call so Base variant rule can still adjust scale/tint if author configured it
+            enemy.ApplyVariant(rule);
+            if (logVariantSpawns)
+            {
+                Debug.Log($"[WaveManager] Spawn variant={rule.variant} wave={CurrentWaveNumber} healthMult={rule.healthMult:F2} speedMult={rule.speedMult:F2} rewardMult={rule.rewardMult:F2} weight={rule.spawnWeight:F2}");
+            }
         }
 
         private IEnumerator WaitForDelay(float delay)

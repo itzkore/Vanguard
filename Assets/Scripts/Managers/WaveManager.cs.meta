@@ -3,7 +3,13 @@ guid: 9a2fbf463cf7f8b41bceaf31e955d0af
 MonoImporter:
   externalObjects: {}
   serializedVersion: 2
-  defaultReferences: []
+  defaultReferences:
+  - waveSequence: {fileID: 11400000, guid: fe402e8047f69e748b671c24bec392d0, type: 2}
+  - onPhaseChanged: {instanceID: 0}
+  - onWaveStarted: {instanceID: 0}
+  - onWaveCompleted: {instanceID: 0}
+  - defaultEnemyData: {instanceID: 0}
+  - variantConfig: {fileID: 11400000, guid: 50952501ec985c445908fd2dfd2f753a, type: 2}
   executionOrder: 0
   icon: {instanceID: 0}
   userData: 

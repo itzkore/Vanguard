@@ -68,42 +68,18 @@ namespace BulletHeavenFortressDefense.UI
                 OnEnergyChanged(EconomySystem.Instance.CurrentEnergy);
             }
 
-            if (WaveManager.HasInstance)
-            {
-                WaveManager.Instance.WaveStarted += OnWaveStarted;
-                WaveManager.Instance.WaveCompleted += OnWaveCompleted;
-                WaveManager.Instance.PhaseChanged += OnPhaseChanged;
-                WaveManager.Instance.PhaseTimerUpdated += OnPhaseTimerUpdated;
-                WaveManager.Instance.WaveStarted += _ => UpdateKills();
-                OnPhaseChanged(WaveManager.Instance.CurrentPhase);
-                if (WaveManager.Instance.CurrentWaveNumber > 0)
-                {
-                    OnWaveStarted(WaveManager.Instance.CurrentWaveNumber);
-                }
-                else if (waveText != null)
-                {
-                    waveText.text = "Wave 0";
-                }
-
-                OnPhaseTimerUpdated(WaveManager.Instance.CurrentPhase, WaveManager.Instance.CurrentPhaseTimeRemaining);
-                UpdateKills();
-                // Safety net: schedule a late refresh in case wave started before HUD enabled
-                StartCoroutine(LateWaveRefresh());
-            }
+            TryBindWaveEvents(verbose:false);
+            StartCoroutine(LateWaveRefresh());
         }
 
         private System.Collections.IEnumerator LateWaveRefresh()
         {
-            // Wait a short moment to allow WaveManager to initialize if spawning concurrently
-            yield return null; // one frame
+            yield return null;
             yield return new WaitForSecondsRealtime(0.25f);
             if (WaveManager.HasInstance && waveText != null)
             {
                 int w = WaveManager.Instance.CurrentWaveNumber;
-                if (w >= 0)
-                {
-                    waveText.text = FormatWaveText(w);
-                }
+                if (w >= 0) waveText.text = FormatWaveText(w);
             }
         }
 
@@ -119,13 +95,7 @@ namespace BulletHeavenFortressDefense.UI
                 EconomySystem.Instance.EnergyChanged -= OnEnergyChanged;
             }
 
-            if (WaveManager.HasInstance)
-            {
-                WaveManager.Instance.WaveStarted -= OnWaveStarted;
-                WaveManager.Instance.PhaseChanged -= OnPhaseChanged;
-                WaveManager.Instance.PhaseTimerUpdated -= OnPhaseTimerUpdated;
-                WaveManager.Instance.WaveCompleted -= OnWaveCompleted;
-            }
+            UnbindWaveEvents();
         }
 
         private bool _coreSubscriptionVerified;
@@ -145,6 +115,22 @@ namespace BulletHeavenFortressDefense.UI
                 }
             }
 
+            // Late attempt to bind wave events if WaveManager appeared after HUD enabled
+            if (!_waveEventsBound)
+            {
+                TryBindWaveEvents(verbose:false);
+            }
+
+            // Fallback: if we missed WaveCompleted event but phase is already Completed and we haven't shown text yet this wave, show it
+            if (_waveEventsBound && WaveManager.HasInstance && WaveManager.Instance.CurrentPhase == WaveManager.WavePhase.Completed && !_waveCompleteShownForWave)
+            {
+                int w = WaveManager.Instance.CurrentWaveNumber;
+                if (w > 0)
+                {
+                    Debug.Log("[HUDController] Detected completed phase without prior announcement, forcing wave complete UI.");
+                    OnWaveCompleted(w);
+                }
+            }
             // Wave label self-heal: if somehow destroyed at runtime, recreate (check infrequently for cost)
             _waveLabelHealTimer += Time.unscaledDeltaTime;
             if (_waveLabelHealTimer >= 1.0f)
@@ -168,8 +154,51 @@ namespace BulletHeavenFortressDefense.UI
             }
         }
 
+        private bool _waveEventsBound;
+        private int _lastAnnouncedWave = -1;
+        private bool _waveCompleteShownForWave => _lastAnnouncedWave == (WaveManager.HasInstance ? WaveManager.Instance.CurrentWaveNumber : -1);
+
+        private void TryBindWaveEvents(bool verbose)
+        {
+            if (!WaveManager.HasInstance || _waveEventsBound) return;
+            var wm = WaveManager.Instance;
+            wm.WaveStarted += OnWaveStarted;
+            wm.WaveCompleted += OnWaveCompleted;
+            wm.PhaseChanged += OnPhaseChanged;
+            wm.PhaseTimerUpdated += OnPhaseTimerUpdated;
+            wm.WaveStarted += _ => UpdateKills();
+            _waveEventsBound = true;
+            if (verbose) Debug.Log("[HUDController] Wave events bound late.");
+
+            OnPhaseChanged(wm.CurrentPhase);
+            if (wm.CurrentWaveNumber > 0)
+            {
+                OnWaveStarted(wm.CurrentWaveNumber);
+            }
+            else if (waveText != null)
+            {
+                waveText.text = "Wave 0";
+            }
+            OnPhaseTimerUpdated(wm.CurrentPhase, wm.CurrentPhaseTimeRemaining);
+            UpdateKills();
+            StartCoroutine(LateWaveRefresh());
+        }
+
+        private void UnbindWaveEvents()
+        {
+            if (!_waveEventsBound || !WaveManager.HasInstance) return;
+            var wm = WaveManager.Instance;
+            wm.WaveStarted -= OnWaveStarted;
+            wm.WaveCompleted -= OnWaveCompleted;
+            wm.PhaseChanged -= OnPhaseChanged;
+            wm.PhaseTimerUpdated -= OnPhaseTimerUpdated;
+            _waveEventsBound = false;
+        }
+
         private void OnWaveCompleted(int waveNumber)
         {
+            _lastAnnouncedWave = waveNumber;
+            Debug.Log($"[HUDController] WaveCompleted received wave={waveNumber}");
             ShowWaveCompleteAnnouncement(waveNumber);
         }
 

@@ -8,6 +8,7 @@ namespace BulletHeavenFortressDefense.UI
     /// Displays a row of star icons above the tower to visualize its current level (rank).
     /// Stars fill up to current level; max star count limited to configured max (e.g., 10).
     /// </summary>
+    [DisallowMultipleComponent]
     public class TowerStarRankDisplay : MonoBehaviour
     {
         [SerializeField] private TowerBehaviour tower; // auto-assign if null
@@ -80,7 +81,7 @@ namespace BulletHeavenFortressDefense.UI
                     }
                 }
             }
-            if (tower != null)
+            if (tower != null && _canvas != null)
             {
                 var basePos = tower.transform.position + Vector3.up * verticalOffset;
                 _canvas.transform.position = basePos;
@@ -94,6 +95,7 @@ namespace BulletHeavenFortressDefense.UI
 
         private void CreateCanvas()
         {
+            if (_canvas != null) return;
             var go = new GameObject("StarCanvas", typeof(RectTransform));
             go.transform.SetParent(transform, false);
             _canvas = go.AddComponent<Canvas>();
@@ -107,9 +109,16 @@ namespace BulletHeavenFortressDefense.UI
 
         private void BuildStars()
         {
+            if (_canvas == null)
+            {
+                Debug.LogWarning("[TowerStarRankDisplay] BuildStars called without canvas. Recreating.", this);
+                CreateCanvas();
+                if (_canvas == null) return; // still failed – abort
+            }
+            if (_stars.Count > 0) return; // already built
+
             _usingTextFallback = (starFilled == null || starEmpty == null) && allowTextFallback;
 
-            // Determine total width to center align
             float totalWidth = (maxStars - 1) * starSpacing;
             float startOffset = -totalWidth * 0.5f;
 
@@ -125,17 +134,15 @@ namespace BulletHeavenFortressDefense.UI
                     rt.localPosition = new Vector3(startOffset + i * starSpacing, 0f, 0f);
                     rt.sizeDelta = new Vector2(starScale, starScale);
                     var txt = go.AddComponent<Text>();
-                    txt.text = "☆"; // empty star
+                    txt.text = "☆";
                     txt.alignment = TextAnchor.MiddleCenter;
                     txt.fontSize = textFallbackSize;
                     txt.color = new Color(1f,1f,1f,0.2f);
                     txt.resizeTextForBestFit = false;
-                    // Use any available font (UIFontProvider if accessible)
                     var f = UIFontProvider.Get();
                     if (f != null) txt.font = f;
-                    // Wrap text fallback in an Image placeholder for unified list handling
                     var img = go.AddComponent<Image>();
-                    img.enabled = false; // we control via text, keep list for iteration
+                    img.enabled = false;
                     _stars.Add(img);
                 }
                 else
@@ -163,7 +170,7 @@ namespace BulletHeavenFortressDefense.UI
 
         private void Refresh()
         {
-            if (tower == null) return;
+            if (tower == null || _canvas == null) return;
             int lvl = Mathf.Max(1, tower.Level);
             if (hideAtBaseLevel && lvl <= 1)
             {
